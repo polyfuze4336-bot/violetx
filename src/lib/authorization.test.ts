@@ -14,6 +14,9 @@ import { requireAuth, requireOwner } from "@/lib/auth";
 import { requireOwnerAthlete } from "@/lib/services/context";
 import { bodyWeightService } from "@/lib/services/bodyWeight";
 import { measurementService } from "@/lib/services/measurement";
+import { gymService } from "@/lib/services/gym";
+import { nutritionService } from "@/lib/services/nutrition";
+import { importService } from "@/lib/services/import";
 import { AuthenticationError, AuthorizationError } from "@/lib/rbac";
 import type { Role } from "@/lib/rbac";
 
@@ -84,6 +87,31 @@ describe("authorization (backend enforcement)", () => {
   it("blocks COACH from deleting a measurement (403)", async () => {
     mocked.mockResolvedValue(session("COACH", "athlete-1"));
     const err = await measurementService.deleteEntry("m1").catch((e) => e);
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect(err.status).toBe(403);
+  });
+
+  it("blocks COACH from marking a gym visited (403)", async () => {
+    mocked.mockResolvedValue(session("COACH", "athlete-1"));
+    const err = await gymService.markVisited("gym-1").catch((e) => e);
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect(err.status).toBe(403);
+  });
+
+  it("blocks COACH from logging nutrition (403)", async () => {
+    mocked.mockResolvedValue(session("COACH", "athlete-1"));
+    const err = await nutritionService
+      .create({ entryDate: new Date(), calories: 2000 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(AuthorizationError);
+    expect(err.status).toBe(403);
+  });
+
+  it("blocks COACH from writing the AI audit trail (403)", async () => {
+    mocked.mockResolvedValue(session("COACH", "athlete-1"));
+    const err = await importService
+      .attachAiAudit("batch-1", "user-1", "violet-parser", null, [])
+      .catch((e) => e);
     expect(err).toBeInstanceOf(AuthorizationError);
     expect(err.status).toBe(403);
   });
