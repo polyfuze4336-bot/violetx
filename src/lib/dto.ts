@@ -97,6 +97,7 @@ export interface AthleteProfileDTO {
   sex: string | null;
   defaultWeightUnit: string;
   defaultMeasurementUnit: Unit;
+  trustedAiImports: boolean;
 }
 
 // Mappers ---------------------------------------------------------------------
@@ -181,5 +182,6 @@ export function toAthleteProfileDTO(a: Athlete): AthleteProfileDTO {
     sex: a.sex,
     defaultWeightUnit: a.defaultWeightUnit ?? "KG",
     defaultMeasurementUnit: (a.defaultMeasurementUnit as Unit) ?? "CM",
+    trustedAiImports: a.trustedAiImports ?? false,
   };
 }

@@ -178,6 +178,7 @@ export const updateAthleteProfileSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   defaultMeasurementUnit: unitSchema.optional(),
+  trustedAiImports: z.coerce.boolean().optional(),
 });
 export type UpdateAthleteProfileInput = z.infer<
   typeof updateAthleteProfileSchema

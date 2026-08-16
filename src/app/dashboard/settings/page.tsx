@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { athleteService } from "@/lib/services/athlete";
 import { measurementService } from "@/lib/services/measurement";
+import { userAdminService } from "@/lib/services/userAdmin";
 import {
   Card,
   CardContent,
@@ -13,6 +14,8 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { MeasurementTypeManager } from "@/components/settings/measurement-type-manager";
+import { CoachManager } from "@/components/settings/coach-manager";
+import { TrustedImportsToggle } from "@/components/settings/trusted-imports-toggle";
 
 export default async function SettingsPage() {
   const viewer = await requireAuth();
@@ -20,9 +23,10 @@ export default async function SettingsPage() {
     redirect("/dashboard");
   }
 
-  const [profile, types] = await Promise.all([
+  const [profile, types, coach] = await Promise.all([
     athleteService.getProfile(),
     measurementService.listTypes(),
+    userAdminService.getCoach(),
   ]);
 
   return (
@@ -54,6 +58,32 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <MeasurementTypeManager types={types} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Violet AI imports</CardTitle>
+            <CardDescription>
+              Control how much Violet can do on its own when interpreting your
+              updates.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TrustedImportsToggle enabled={profile.trustedAiImports} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Coach access</CardTitle>
+            <CardDescription>
+              Give your coach a read-only account. They can view your progress
+              but cannot make changes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CoachManager coach={coach} />
           </CardContent>
         </Card>
       </div>

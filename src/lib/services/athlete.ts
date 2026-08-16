@@ -33,6 +33,9 @@ export const athleteService = {
       ...(data.defaultMeasurementUnit !== undefined
         ? { defaultMeasurementUnit: data.defaultMeasurementUnit }
         : {}),
+      ...(data.trustedAiImports !== undefined
+        ? { trustedAiImports: data.trustedAiImports }
+        : {}),
     });
     return toAthleteProfileDTO(updated);
   },
