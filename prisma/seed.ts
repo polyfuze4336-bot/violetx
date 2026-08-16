@@ -44,6 +44,45 @@ const DEFAULT_EXERCISES: {
   { name: "Tricep Extension", category: "Arms", muscleGroup: "Triceps", equipment: "Cable" },
 ];
 
+// Curated sample of Anytime Fitness Malaysia branches (locally controlled
+// dataset; replace via a branch sync mechanism). Coordinates are approximate.
+const GYM_BRANCHES: {
+  name: string;
+  city: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+}[] = [
+  { name: "Anytime Fitness KLCC", city: "Kuala Lumpur", state: "Kuala Lumpur", latitude: 3.1578, longitude: 101.7117 },
+  { name: "Anytime Fitness Bangsar", city: "Kuala Lumpur", state: "Kuala Lumpur", latitude: 3.1289, longitude: 101.6789 },
+  { name: "Anytime Fitness Mont Kiara", city: "Kuala Lumpur", state: "Kuala Lumpur", latitude: 3.1725, longitude: 101.6509 },
+  { name: "Anytime Fitness Cheras", city: "Kuala Lumpur", state: "Kuala Lumpur", latitude: 3.1045, longitude: 101.744 },
+  { name: "Anytime Fitness Setapak", city: "Kuala Lumpur", state: "Kuala Lumpur", latitude: 3.2015, longitude: 101.7256 },
+  { name: "Anytime Fitness Petaling Jaya", city: "Petaling Jaya", state: "Selangor", latitude: 3.1073, longitude: 101.6068 },
+  { name: "Anytime Fitness Subang Jaya", city: "Subang Jaya", state: "Selangor", latitude: 3.0567, longitude: 101.5851 },
+  { name: "Anytime Fitness Shah Alam", city: "Shah Alam", state: "Selangor", latitude: 3.0733, longitude: 101.5185 },
+  { name: "Anytime Fitness Puchong", city: "Puchong", state: "Selangor", latitude: 3.0169, longitude: 101.6167 },
+  { name: "Anytime Fitness Kajang", city: "Kajang", state: "Selangor", latitude: 2.9931, longitude: 101.7871 },
+  { name: "Anytime Fitness Klang", city: "Klang", state: "Selangor", latitude: 3.0449, longitude: 101.4455 },
+  { name: "Anytime Fitness George Town", city: "George Town", state: "Penang", latitude: 5.4141, longitude: 100.3288 },
+  { name: "Anytime Fitness Bayan Lepas", city: "Bayan Lepas", state: "Penang", latitude: 5.2945, longitude: 100.2779 },
+  { name: "Anytime Fitness Butterworth", city: "Butterworth", state: "Penang", latitude: 5.3991, longitude: 100.3638 },
+  { name: "Anytime Fitness Johor Bahru City", city: "Johor Bahru", state: "Johor", latitude: 1.4655, longitude: 103.7578 },
+  { name: "Anytime Fitness Skudai", city: "Skudai", state: "Johor", latitude: 1.5353, longitude: 103.6591 },
+  { name: "Anytime Fitness Bukit Indah", city: "Iskandar Puteri", state: "Johor", latitude: 1.4738, longitude: 103.6584 },
+  { name: "Anytime Fitness Ipoh", city: "Ipoh", state: "Perak", latitude: 4.5975, longitude: 101.0901 },
+  { name: "Anytime Fitness Melaka Raya", city: "Malacca City", state: "Melaka", latitude: 2.1896, longitude: 102.2501 },
+  { name: "Anytime Fitness Seremban", city: "Seremban", state: "Negeri Sembilan", latitude: 2.7297, longitude: 101.9381 },
+  { name: "Anytime Fitness Kota Kinabalu", city: "Kota Kinabalu", state: "Sabah", latitude: 5.9804, longitude: 116.0735 },
+  { name: "Anytime Fitness Kuching", city: "Kuching", state: "Sarawak", latitude: 1.5533, longitude: 110.3592 },
+  { name: "Anytime Fitness Miri", city: "Miri", state: "Sarawak", latitude: 4.3999, longitude: 113.9914 },
+  { name: "Anytime Fitness Alor Setar", city: "Alor Setar", state: "Kedah", latitude: 6.1264, longitude: 100.3673 },
+  { name: "Anytime Fitness Kuantan", city: "Kuantan", state: "Pahang", latitude: 3.8168, longitude: 103.3256 },
+  { name: "Anytime Fitness Kota Bharu", city: "Kota Bharu", state: "Kelantan", latitude: 6.1254, longitude: 102.2381 },
+  { name: "Anytime Fitness Kuala Terengganu", city: "Kuala Terengganu", state: "Terengganu", latitude: 5.3296, longitude: 103.1370 },
+  { name: "Anytime Fitness Putrajaya", city: "Putrajaya", state: "Putrajaya", latitude: 2.9264, longitude: 101.6964 },
+];
+
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const DATES = [
   d("2026-06-01"),
@@ -179,6 +218,50 @@ async function main() {
     } else {
       console.log("Sample data skipped (records already exist).");
     }
+  }
+
+  // Gym branches are reference data — seed once if the table is empty.
+  if ((await prisma.gymBranch.count()) === 0) {
+    await prisma.gymBranch.createMany({
+      data: GYM_BRANCHES.map((g) => ({
+        name: g.name,
+        city: g.city,
+        state: g.state,
+        latitude: g.latitude,
+        longitude: g.longitude,
+        source: "seed-sample",
+        sourceUpdatedAt: new Date(),
+      })),
+    });
+    console.log(`Seeded ${GYM_BRANCHES.length} gym branches.`);
+  }
+
+  // Sample gym visits (dev only, when the athlete has none).
+  if (
+    SEED_SAMPLE &&
+    (await prisma.gymVisit.count({ where: { athleteId: athlete.id } })) === 0
+  ) {
+    const someBranches = await prisma.gymBranch.findMany({
+      take: 6,
+      orderBy: { name: "asc" },
+    });
+    const visitDates = [
+      "2026-06-05",
+      "2026-06-20",
+      "2026-07-05",
+      "2026-07-18",
+      "2026-08-02",
+      "2026-08-16",
+    ];
+    await prisma.gymVisit.createMany({
+      data: someBranches.map((b, i) => ({
+        athleteId: athlete.id,
+        gymBranchId: b.id,
+        visitedAt: d(visitDates[i] ?? "2026-08-16"),
+        source: "MANUAL",
+      })),
+    });
+    console.log("Seeded sample gym visits.");
   }
 
   console.log(

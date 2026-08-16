@@ -1,10 +1,13 @@
 import {
   Dumbbell,
   History,
-  LayoutDashboard,
+  Home,
+  Map,
   MessageSquareText,
   Ruler,
+  Salad,
   Settings,
+  Sparkles,
   TrendingUp,
   Trophy,
   type LucideIcon,
@@ -21,37 +24,36 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Home", icon: Home, bottomNav: true },
   {
-    href: "/dashboard",
-    label: "Overview",
-    icon: LayoutDashboard,
+    href: "/dashboard/coach",
+    label: "AI Coach",
+    icon: Sparkles,
+    ownerOnly: true,
     bottomNav: true,
   },
-  {
-    href: "/dashboard/measurements",
-    label: "Measurements",
-    icon: Ruler,
-    bottomNav: true,
-  },
+  { href: "/dashboard/weight", label: "Progress", icon: TrendingUp },
   {
     href: "/dashboard/strength",
     label: "Strength",
-    icon: TrendingUp,
+    icon: Dumbbell,
     bottomNav: true,
   },
-  { href: "/dashboard/exercises", label: "Exercises", icon: Dumbbell },
+  { href: "/dashboard/measurements", label: "Measurements", icon: Ruler },
+  {
+    href: "/dashboard/nutrition",
+    label: "Nutrition",
+    icon: Salad,
+    ownerOnly: true,
+  },
+  { href: "/dashboard/gym", label: "Gym Journey", icon: Map, bottomNav: true },
   { href: "/dashboard/history", label: "History", icon: History },
+  { href: "/dashboard/records", label: "Records", icon: Trophy },
   {
     href: "/dashboard/import",
     label: "Import",
     icon: MessageSquareText,
     ownerOnly: true,
-  },
-  {
-    href: "/dashboard/records",
-    label: "Records",
-    icon: Trophy,
-    bottomNav: true,
   },
   {
     href: "/dashboard/settings",
@@ -60,4 +62,3 @@ export const NAV_ITEMS: NavItem[] = [
     ownerOnly: true,
   },
 ];
-

@@ -233,4 +233,38 @@ export const importService = {
       return summary;
     });
   },
+
+  /**
+   * Record the AI audit trail for a committed import: provenance on the batch
+   * plus one AIAction per approved proposal (who approved, confidence, payload).
+   */
+  async attachAiAudit(
+    batchId: string,
+    approvedById: string,
+    provider: string,
+    model: string | null,
+    actions: { actionType: string; payload: unknown; confidence: number | null }[]
+  ): Promise<void> {
+    await requireOwnerAthlete();
+    const approvedAt = new Date();
+    await prisma.$transaction([
+      prisma.importBatch.update({
+        where: { id: batchId },
+        data: { aiProvider: provider, model: model ?? undefined },
+      }),
+      ...actions.map((a) =>
+        prisma.aIAction.create({
+          data: {
+            importBatchId: batchId,
+            actionType: a.actionType,
+            payload: JSON.stringify(a.payload),
+            confidence: a.confidence,
+            status: "APPROVED",
+            approvedById,
+            approvedAt,
+          },
+        })
+      ),
+    ]);
+  },
 };

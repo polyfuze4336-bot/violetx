@@ -246,3 +246,24 @@ export const setCoachSchema = z.object({
   password: passwordSchema,
 });
 export type SetCoachInput = z.infer<typeof setCoachSchema>;
+
+// Nutrition -------------------------------------------------------------------
+
+const optionalMacro = z.coerce.number().min(0).max(100000).optional();
+
+export const createNutritionSchema = z.object({
+  entryDate: dateSchema,
+  calories: z.coerce.number().int().min(0).max(100000).optional(),
+  protein: optionalMacro,
+  carbohydrates: optionalMacro,
+  fat: optionalMacro,
+  fibre: optionalMacro,
+  water: optionalMacro,
+  notes: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+});
+export type CreateNutritionInput = z.infer<typeof createNutritionSchema>;
