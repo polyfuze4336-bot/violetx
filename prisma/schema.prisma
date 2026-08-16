@@ -1,0 +1,215 @@
+// Progress — Prisma schema (Azure SQL Database)
+//
+// Notes:
+// - The SQL Server connector does NOT support Prisma enums, so role/unit/type
+//   fields are stored as String and validated in the app layer with Zod.
+// - Records belong to an Athlete (multi-athlete-capable) but v1 has a single
+//   Athlete owned by the OWNER user. The Coach reads the same athlete.
+// - Personal records are DERIVED from ExerciseEntry data in the service layer,
+//   so they are always consistent (no separate PR table to keep in sync).
+// - SQL Server forbids multiple/cyclic cascade paths, so all relations use
+//   NoAction referential actions and deletions are handled in the service layer.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+/// Authenticated identity (Microsoft Entra ID). role is "OWNER" or "COACH".
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?   @db.NVarChar(1024)
+  role          String    @default("COACH") @db.NVarChar(16)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ownedAthlete  Athlete?  @relation("AthleteOwner")
+  importBatches ImportBatch[]
+
+  @@index([role])
+}
+
+/// The athlete whose data is tracked. Owned by exactly one OWNER user.
+model Athlete {
+  id           String   @id @default(cuid())
+  ownerUserId  String   @unique
+  displayName  String   @db.NVarChar(200)
+  heightCm     Decimal? @db.Decimal(5, 1)
+  birthDate    DateTime?
+  sex          String?  @db.NVarChar(16)
+  defaultWeightUnit      String @default("KG") @db.NVarChar(8)
+  defaultMeasurementUnit String @default("CM") @db.NVarChar(8)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  owner            User              @relation("AthleteOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bodyWeights      BodyWeightEntry[]
+  measurementTypes MeasurementType[]
+  measurements     MeasurementEntry[]
+  exercises        Exercise[]
+  sessions         WorkoutSession[]
+  exerciseEntries  ExerciseEntry[]
+  notes            Note[]
+  importBatches    ImportBatch[]
+}
+
+/// Body weight over time (always kilograms).
+model BodyWeightEntry {
+  id            String       @id @default(cuid())
+  athleteId     String
+  date          DateTime
+  weightKg      Decimal      @db.Decimal(6, 2)
+  note          String?      @db.NVarChar(1024)
+  source        String       @default("MANUAL") @db.NVarChar(16)
+  importBatchId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  athlete       Athlete      @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, date])
+}
+
+/// Owner-managed measurement definitions (e.g. Waist, Hip, Chest).
+/// defaultUnit is "CM" or "INCH".
+model MeasurementType {
+  id          String   @id @default(cuid())
+  athleteId   String
+  name        String   @db.NVarChar(100)
+  defaultUnit String   @default("CM") @db.NVarChar(8)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  athlete     Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries     MeasurementEntry[]
+
+  @@unique([athleteId, name])
+}
+
+/// A single body-measurement reading. unit is "CM" or "INCH".
+model MeasurementEntry {
+  id            String          @id @default(cuid())
+  athleteId     String
+  typeId        String
+  date          DateTime
+  value         Decimal         @db.Decimal(6, 2)
+  unit          String          @default("CM") @db.NVarChar(8)
+  note          String?         @db.NVarChar(1024)
+  source        String          @default("MANUAL") @db.NVarChar(16)
+  importBatchId String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type          MeasurementType @relation(fields: [typeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, typeId, date])
+}
+
+/// Owner-managed exercise definitions.
+model Exercise {
+  id          String   @id @default(cuid())
+  athleteId   String
+  name        String   @db.NVarChar(150)
+  category    String?  @db.NVarChar(60)
+  muscleGroup String?  @db.NVarChar(60)
+  equipment   String?  @db.NVarChar(60)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  athlete   Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries   ExerciseEntry[]
+
+  @@unique([athleteId, name])
+}
+
+/// A training day. Groups exercise entries by date.
+model WorkoutSession {
+  id            String          @id @default(cuid())
+  athleteId     String
+  date          DateTime
+  note          String?         @db.NVarChar(2048)
+  importBatchId String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries       ExerciseEntry[]
+  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, date])
+}
+
+/// One performed set: reps x weightKg for an exercise on a date.
+/// e.g. "Hip abduction 9x50kg" => reps=9, weightKg=50.
+model ExerciseEntry {
+  id            String          @id @default(cuid())
+  athleteId     String
+  exerciseId    String
+  sessionId     String?
+  date          DateTime
+  reps          Int
+  weightKg      Decimal         @db.Decimal(6, 2)
+  sets          Int?
+  position      Int             @default(0)
+  note          String?         @db.NVarChar(1024)
+  source        String          @default("MANUAL") @db.NVarChar(16)
+  importBatchId String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exercise      Exercise        @relation(fields: [exerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session       WorkoutSession? @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, exerciseId, date])
+  @@index([athleteId, date])
+}
+
+/// Free-text training notes tied to a date.
+model Note {
+  id        String   @id @default(cuid())
+  athleteId String
+  date      DateTime
+  title     String?  @db.NVarChar(200)
+  body      String   @db.NVarChar(Max)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, date])
+}
+
+/// Audit + grouping record for a WhatsApp import. Links all records created
+/// from a single pasted message so they can be reviewed or rolled back.
+model ImportBatch {
+  id          String   @id @default(cuid())
+  athleteId   String
+  createdById String
+  rawText     String   @db.NVarChar(Max)
+  sourceDate  DateTime?
+  status      String   @default("COMMITTED") @db.NVarChar(20)
+  createdAt   DateTime @default(now())
+
+  athlete      Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bodyWeights  BodyWeightEntry[]
+  measurements MeasurementEntry[]
+  sessions     WorkoutSession[]
+  exercises    ExerciseEntry[]
+
+  @@index([athleteId, createdAt])
+}

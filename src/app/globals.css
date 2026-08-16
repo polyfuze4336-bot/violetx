@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Neutral whites & soft grey surfaces, charcoal text */
+    --background: 260 30% 99%;
+    --foreground: 258 20% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 258 20% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 258 20% 14%;
+    /* Anytime Fitness inspired: purple primary */
+    --primary: 264 72% 52%;
+    --primary-foreground: 0 0% 100%;
+    /* Neutral accent used for hover/subtle surfaces */
+    --accent: 258 30% 95%;
+    --accent-foreground: 258 22% 20%;
+    /* Magenta / pink brand accent — used intentionally for highlights */
+    --magenta: 322 82% 55%;
+    --magenta-foreground: 0 0% 100%;
+    --secondary: 260 30% 96%;
+    --secondary-foreground: 258 22% 20%;
+    --muted: 258 28% 96%;
+    --muted-foreground: 256 12% 46%;
+    --destructive: 0 78% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 72% 38%;
+    --success-foreground: 0 0% 100%;
+    --border: 258 24% 92%;
+    --input: 258 24% 90%;
+    --ring: 264 72% 52%;
+    /* Chart series: purple, magenta, teal (improvement), amber, blue */
+    --chart-1: 264 72% 56%;
+    --chart-2: 322 82% 58%;
+    --chart-3: 158 68% 42%;
+    --chart-4: 32 92% 55%;
+    --chart-5: 214 84% 56%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 260 24% 8%;
+    --foreground: 258 16% 94%;
+    --card: 258 22% 11%;
+    --card-foreground: 258 16% 94%;
+    --popover: 258 22% 11%;
+    --popover-foreground: 258 16% 94%;
+    --primary: 264 78% 66%;
+    --primary-foreground: 260 30% 10%;
+    --accent: 258 18% 20%;
+    --accent-foreground: 258 16% 92%;
+    --magenta: 322 80% 62%;
+    --magenta-foreground: 260 30% 10%;
+    --secondary: 258 18% 18%;
+    --secondary-foreground: 258 16% 92%;
+    --muted: 258 18% 17%;
+    --muted-foreground: 256 12% 64%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 64% 46%;
+    --success-foreground: 260 30% 10%;
+    --border: 258 16% 20%;
+    --input: 258 16% 22%;
+    --ring: 264 78% 66%;
+    --chart-1: 264 78% 68%;
+    --chart-2: 322 80% 66%;
+    --chart-3: 158 62% 50%;
+    --chart-4: 32 92% 60%;
+    --chart-5: 214 84% 64%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer utilities {
+  /* Brand gradient purple -> magenta */
+  .bg-brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(264 72% 52%) 0%,
+      hsl(300 76% 54%) 50%,
+      hsl(322 82% 55%) 100%
+    );
+  }
+  .text-brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(264 72% 52%) 0%,
+      hsl(322 82% 55%) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Subtle translucent surface for glass elements */
+  .glass {
+    background-color: hsl(var(--background) / 0.72);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Soft ambient page background */
+  .app-surface {
+    background:
+      radial-gradient(
+        60rem 60rem at 110% -10%,
+        hsl(322 82% 55% / 0.06),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 50rem at -10% 0%,
+        hsl(264 72% 52% / 0.07),
+        transparent 55%
+      ),
+      hsl(var(--background));
+  }
+}

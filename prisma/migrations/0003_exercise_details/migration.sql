@@ -1,0 +1,22 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- AlterTable
+ALTER TABLE [dbo].[Exercise] ADD [active] BIT NOT NULL CONSTRAINT [Exercise_active_df] DEFAULT 1,
+[equipment] NVARCHAR(60),
+[muscleGroup] NVARCHAR(60);
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH
+
