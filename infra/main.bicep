@@ -1,13 +1,19 @@
-// Progress — Azure infrastructure
+// VioletX — Azure infrastructure
 // Provisions: Azure SQL (server + database), Key Vault (with secrets),
 // a Linux App Service plan + web app with a system-assigned managed identity,
 // and wires secrets into the web app via Key Vault references.
 //
+// Authentication is database-based (hashed passwords) — NO Microsoft Entra ID
+// for end-user login. Azure OpenAI (Violet) and Azure Maps are OPTIONAL and
+// configured by parameter; when omitted the app falls back to the built-in
+// deterministic "violet-parser" and the self-rendered gym map. Reuse existing
+// AI/Maps resources by passing their endpoint/keys rather than provisioning new
+// ones here.
+//
 // Deploy:
 //   az group create -n <rg> -l <location>
 //   az deployment group create -g <rg> -f infra/main.bicep -p infra/main.parameters.json \
-//     -p sqlAdminPassword=... nextAuthSecret=... azureAdClientId=... \
-//        azureAdClientSecret=... azureAdTenantId=...
+//     -p sqlAdminPassword=... nextAuthSecret=... ownerEmail=...
 
 @description('Base name used to derive resource names (lowercase, 3-16 chars).')
 @minLength(3)
@@ -18,7 +24,7 @@ param appName string = 'violetx'
 param location string = resourceGroup().location
 
 @description('Azure SQL administrator login.')
-param sqlAdminLogin string = 'progressadmin'
+param sqlAdminLogin string = 'violetxadmin'
 
 @description('Azure SQL administrator password.')
 @secure()
@@ -28,23 +34,25 @@ param sqlAdminPassword string
 @secure()
 param nextAuthSecret string
 
-@description('Microsoft Entra ID application (client) ID.')
-@secure()
-param azureAdClientId string
-
-@description('Microsoft Entra ID client secret.')
-@secure()
-param azureAdClientSecret string
-
-@description('Microsoft Entra ID tenant ID.')
-@secure()
-param azureAdTenantId string
-
-@description('Email address of the athlete (OWNER). All other users are read-only coaches.')
+@description('Email address of the athlete (OWNER). Displayed everywhere as "Patient X".')
 param ownerEmail string
 
-@description('Optional comma-separated allow-list of coach emails. Empty = any Entra user may sign in.')
-param allowedCoachEmails string = ''
+@description('Optional AI provider label (e.g. azure-openai). Empty = deterministic violet-parser.')
+param aiProvider string = ''
+
+@description('Optional Azure OpenAI endpoint (reuse an existing resource). Empty disables AI calls.')
+param azureOpenAiEndpoint string = ''
+
+@description('Optional Azure OpenAI chat deployment name.')
+param azureOpenAiDeployment string = ''
+
+@description('Optional Azure OpenAI API key. Empty = no live AI; app uses the built-in parser.')
+@secure()
+param azureOpenAiApiKey string = ''
+
+@description('Optional Azure Maps subscription key (reuse an existing account). Empty = self-rendered map.')
+@secure()
+param azureMapsKey string = ''
 
 var suffix = uniqueString(resourceGroup().id)
 var sqlServerName = toLower('${appName}-sql-${suffix}')
@@ -130,27 +138,19 @@ resource secretNextAuth 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource secretAdClientId 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource secretOpenAiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'AZURE-AD-CLIENT-ID'
+  name: 'AZURE-OPENAI-API-KEY'
   properties: {
-    value: azureAdClientId
+    value: azureOpenAiApiKey
   }
 }
 
-resource secretAdClientSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource secretMapsKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'AZURE-AD-CLIENT-SECRET'
+  name: 'AZURE-MAPS-KEY'
   properties: {
-    value: azureAdClientSecret
-  }
-}
-
-resource secretAdTenantId 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZURE-AD-TENANT-ID'
-  properties: {
-    value: azureAdTenantId
+    value: azureMapsKey
   }
 }
 
@@ -217,21 +217,21 @@ resource webAppSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     WEBSITE_NODE_DEFAULT_VERSION: '~20'
     NEXTAUTH_URL: siteUrl
     OWNER_EMAIL: ownerEmail
-    ALLOWED_COACH_EMAILS: allowedCoachEmails
+    AI_PROVIDER: aiProvider
+    AZURE_OPENAI_ENDPOINT: azureOpenAiEndpoint
+    AZURE_OPENAI_DEPLOYMENT: azureOpenAiDeployment
     AZURE_KEY_VAULT_NAME: keyVaultName
     APPLICATIONINSIGHTS_CONNECTION_STRING: appInsights.properties.ConnectionString
     DATABASE_URL: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=DATABASE-URL)'
     NEXTAUTH_SECRET: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=NEXTAUTH-SECRET)'
-    AZURE_AD_CLIENT_ID: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-AD-CLIENT-ID)'
-    AZURE_AD_CLIENT_SECRET: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-AD-CLIENT-SECRET)'
-    AZURE_AD_TENANT_ID: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-AD-TENANT-ID)'
+    AZURE_OPENAI_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-OPENAI-API-KEY)'
+    AZURE_MAPS_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=AZURE-MAPS-KEY)'
   }
   dependsOn: [
     secretDatabaseUrl
     secretNextAuth
-    secretAdClientId
-    secretAdClientSecret
-    secretAdTenantId
+    secretOpenAiKey
+    secretMapsKey
   ]
 }
 
@@ -240,4 +240,3 @@ output webAppUrl string = siteUrl
 output keyVaultName string = keyVaultName
 output appInsightsName string = appInsights.name
 output sqlServerFqdn string = '${sqlServerName}${environment().suffixes.sqlServerHostname}'
-output redirectUri string = '${siteUrl}/api/auth/callback/azure-ad'

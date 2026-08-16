@@ -6,12 +6,18 @@
       "value": "violetx"
     },
     "sqlAdminLogin": {
-      "value": "progressadmin"
+      "value": "violetxadmin"
     },
     "ownerEmail": {
       "value": "athlete@example.com"
     },
-    "allowedCoachEmails": {
+    "aiProvider": {
+      "value": ""
+    },
+    "azureOpenAiEndpoint": {
+      "value": ""
+    },
+    "azureOpenAiDeployment": {
       "value": ""
     }
   }
