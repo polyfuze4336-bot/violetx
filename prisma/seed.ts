@@ -1,8 +1,12 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "athlete@example.com";
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD ?? "VioletX-Dev-Pass1";
+const COACH_EMAIL = process.env.COACH_EMAIL;
+const COACH_PASSWORD = process.env.COACH_PASSWORD;
 
 // Sample data is only inserted outside production and only when the athlete has
 // no records yet — never overwrite or pollute real data.
@@ -102,11 +106,31 @@ const STRENGTH: Record<
 };
 
 async function main() {
+  const ownerPasswordHash = await bcrypt.hash(OWNER_PASSWORD, 12);
   const owner = await prisma.user.upsert({
     where: { email: OWNER_EMAIL },
-    update: { role: "OWNER" },
-    create: { email: OWNER_EMAIL, name: "Patient X", role: "OWNER" },
+    update: { role: "OWNER", passwordHash: ownerPasswordHash, active: true },
+    create: {
+      email: OWNER_EMAIL,
+      name: "Patient X",
+      role: "OWNER",
+      passwordHash: ownerPasswordHash,
+    },
   });
+
+  if (COACH_EMAIL && COACH_PASSWORD) {
+    const coachPasswordHash = await bcrypt.hash(COACH_PASSWORD, 12);
+    await prisma.user.upsert({
+      where: { email: COACH_EMAIL.toLowerCase() },
+      update: { role: "COACH", passwordHash: coachPasswordHash, active: true },
+      create: {
+        email: COACH_EMAIL.toLowerCase(),
+        name: "Coach",
+        role: "COACH",
+        passwordHash: coachPasswordHash,
+      },
+    });
+  }
 
   const athlete = await prisma.athlete.upsert({
     where: { ownerUserId: owner.id },

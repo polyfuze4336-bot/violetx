@@ -224,3 +224,25 @@ export const commitImportSchema = z.object({
     .default([]),
 });
 export type CommitImportInput = z.infer<typeof commitImportSchema>;
+
+// Authentication --------------------------------------------------------------
+
+export const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(200);
+
+export const requestResetSchema = z.object({ email: z.string().email() });
+export type RequestResetInput = z.infer<typeof requestResetSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: passwordSchema,
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const setCoachSchema = z.object({
+  email: z.string().email(),
+  password: passwordSchema,
+});
+export type SetCoachInput = z.infer<typeof setCoachSchema>;

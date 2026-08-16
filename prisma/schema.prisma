@@ -20,20 +20,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Authenticated identity (Microsoft Entra ID). role is "OWNER" or "COACH".
+/// Authenticated identity (database credentials). role is "OWNER" or "COACH".
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  image         String?   @db.NVarChar(1024)
-  role          String    @default("COACH") @db.NVarChar(16)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String?
+  image               String?   @db.NVarChar(1024)
+  role                String    @default("COACH") @db.NVarChar(16)
+  passwordHash        String?   @db.NVarChar(255)
+  active              Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   ownedAthlete  Athlete?  @relation("AthleteOwner")
   importBatches ImportBatch[]
+  approvedAiActions AIAction[]
+  resetTokens   PasswordResetToken[]
 
   @@index([role])
+}
+
+/// Password-reset tokens (hashed). Supports the forgot/reset password flow.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique @db.NVarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
 }
 
 /// The athlete whose data is tracked. Owned by exactly one OWNER user.
@@ -46,6 +67,7 @@ model Athlete {
   sex          String?  @db.NVarChar(16)
   defaultWeightUnit      String @default("KG") @db.NVarChar(8)
   defaultMeasurementUnit String @default("CM") @db.NVarChar(8)
+  trustedAiImports       Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -58,6 +80,8 @@ model Athlete {
   exerciseEntries  ExerciseEntry[]
   notes            Note[]
   importBatches    ImportBatch[]
+  gymVisits        GymVisit[]
+  nutritionEntries NutritionEntry[]
 }
 
 /// Body weight over time (always kilograms).
@@ -193,8 +217,8 @@ model Note {
   @@index([athleteId, date])
 }
 
-/// Audit + grouping record for a WhatsApp import. Links all records created
-/// from a single pasted message so they can be reviewed or rolled back.
+/// Audit + grouping record for a WhatsApp import. Also serves as the AI import
+/// session (originalText/detectedDate/status + optional aiProvider/model).
 model ImportBatch {
   id          String   @id @default(cuid())
   athleteId   String
@@ -202,6 +226,8 @@ model ImportBatch {
   rawText     String   @db.NVarChar(Max)
   sourceDate  DateTime?
   status      String   @default("COMMITTED") @db.NVarChar(20)
+  aiProvider  String?  @db.NVarChar(40)
+  model       String?  @db.NVarChar(80)
   createdAt   DateTime @default(now())
 
   athlete      Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -210,6 +236,89 @@ model ImportBatch {
   measurements MeasurementEntry[]
   sessions     WorkoutSession[]
   exercises    ExerciseEntry[]
+  aiActions    AIAction[]
 
   @@index([athleteId, createdAt])
+}
+
+/// A single AI-proposed change (audit trail). payload is validated JSON; the AI
+/// never writes to the database directly — proposals are approved then applied.
+model AIAction {
+  id            String    @id @default(cuid())
+  importBatchId String
+  actionType    String    @db.NVarChar(60)
+  payload       String    @db.NVarChar(Max)
+  confidence    Float?
+  status        String    @default("PROPOSED") @db.NVarChar(20)
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  importBatch ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedBy  User?       @relation(fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([importBatchId])
+}
+
+/// An Anytime Fitness Malaysia branch. Totals come from this table — never
+/// hardcode branch counts. Sourced from a locally controlled dataset.
+model GymBranch {
+  id              String   @id @default(cuid())
+  name            String   @db.NVarChar(200)
+  address         String?  @db.NVarChar(400)
+  city            String?  @db.NVarChar(120)
+  state           String   @db.NVarChar(80)
+  postcode        String?  @db.NVarChar(20)
+  latitude        Float
+  longitude       Float
+  active          Boolean  @default(true)
+  source          String?  @db.NVarChar(80)
+  sourceUpdatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  visits GymVisit[]
+
+  @@index([state])
+  @@index([active])
+}
+
+/// A visit by the athlete to a gym branch. Unique exploration counts distinct
+/// branches; repeat visits do not increase exploration percentage.
+model GymVisit {
+  id          String   @id @default(cuid())
+  athleteId   String
+  gymBranchId String
+  visitedAt   DateTime
+  notes       String?  @db.NVarChar(1024)
+  source      String   @default("MANUAL") @db.NVarChar(16)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  athlete   Athlete   @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  gymBranch GymBranch @relation(fields: [gymBranchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, gymBranchId])
+  @@index([athleteId, visitedAt])
+}
+
+/// Optional nutrition log. Nutrition is never required for the app to function.
+model NutritionEntry {
+  id            String   @id @default(cuid())
+  athleteId     String
+  entryDate     DateTime
+  calories      Int?
+  protein       Decimal? @db.Decimal(6, 1)
+  carbohydrates Decimal? @db.Decimal(6, 1)
+  fat           Decimal? @db.Decimal(6, 1)
+  fibre         Decimal? @db.Decimal(6, 1)
+  water         Decimal? @db.Decimal(6, 2)
+  notes         String?  @db.NVarChar(2048)
+  source        String   @default("MANUAL") @db.NVarChar(16)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, entryDate])
 }

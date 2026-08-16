@@ -12,9 +12,8 @@ import { SecretClient } from "@azure/keyvault-secrets";
 const SECRET_MAP: Record<string, string> = {
   DATABASE_URL: "DATABASE-URL",
   NEXTAUTH_SECRET: "NEXTAUTH-SECRET",
-  AZURE_AD_CLIENT_ID: "AZURE-AD-CLIENT-ID",
-  AZURE_AD_CLIENT_SECRET: "AZURE-AD-CLIENT-SECRET",
-  AZURE_AD_TENANT_ID: "AZURE-AD-TENANT-ID",
+  AZURE_OPENAI_API_KEY: "AZURE-OPENAI-API-KEY",
+  AZURE_MAPS_KEY: "AZURE-MAPS-KEY",
 };
 
 let hydrated = false;

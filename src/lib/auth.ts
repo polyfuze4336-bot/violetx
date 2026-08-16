@@ -1,119 +1,124 @@
-import type { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions, User as NextAuthUser } from "next-auth";
 import { getServerSession } from "next-auth";
-import AzureADProvider from "next-auth/providers/azure-ad";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { z } from "zod";
 
 import { prisma } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
 import {
   AuthenticationError,
   AuthorizationError,
   ROLES,
-  resolveRole,
+  isRole,
   type Role,
 } from "@/lib/rbac";
 
-function extractEmail(
-  user: { email?: string | null },
-  profile?: unknown
-): string | null {
-  if (user.email) return user.email;
-  const p = profile as
-    | { email?: string; preferred_username?: string; upn?: string }
-    | undefined;
-  return p?.email ?? p?.preferred_username ?? p?.upn ?? null;
-}
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 
-function parseAllowedCoachEmails(): string[] {
-  return (process.env.ALLOWED_COACH_EMAILS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-}
+const credentialsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1).max(200),
+});
 
 /**
- * Look up the id of the single active athlete: the athlete owned by the
- * configured OWNER_EMAIL user. Coaches read this athlete.
+ * Resolve the single active athlete id for a user. OWNER → their own athlete;
+ * COACH → the athlete owned by the configured OWNER_EMAIL user.
  */
-async function findActiveAthleteId(): Promise<string | null> {
+async function resolveAthleteId(
+  userId: string,
+  role: Role
+): Promise<string | null> {
+  if (role === ROLES.OWNER) {
+    const athlete = await prisma.athlete.findUnique({
+      where: { ownerUserId: userId },
+      select: { id: true },
+    });
+    return athlete?.id ?? null;
+  }
   const ownerEmail = process.env.OWNER_EMAIL;
   if (!ownerEmail) return null;
   const owner = await prisma.user.findUnique({
-    where: { email: ownerEmail },
+    where: { email: ownerEmail.toLowerCase() },
     include: { ownedAthlete: { select: { id: true } } },
   });
   return owner?.ownedAthlete?.id ?? null;
 }
 
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   secret: process.env.NEXTAUTH_SECRET,
+  pages: { signIn: "/signin", error: "/signin" },
   providers: [
-    AzureADProvider({
-      clientId: process.env.AZURE_AD_CLIENT_ID ?? "",
-      clientSecret: process.env.AZURE_AD_CLIENT_SECRET ?? "",
-      tenantId: process.env.AZURE_AD_TENANT_ID ?? "common",
-      authorization: { params: { scope: "openid profile email" } },
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(raw) {
+        const parsed = credentialsSchema.safeParse(raw);
+        if (!parsed.success) return null;
+        const email = parsed.data.email.trim().toLowerCase();
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        // Do not reveal which check failed (avoid user enumeration).
+        if (!user || !user.active || !user.passwordHash) return null;
+        if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+
+        const ok = await verifyPassword(
+          parsed.data.password,
+          user.passwordHash
+        );
+        if (!ok) {
+          const attempts = user.failedLoginAttempts + 1;
+          const lockedUntil =
+            attempts >= MAX_FAILED_ATTEMPTS
+              ? new Date(Date.now() + LOCK_DURATION_MS)
+              : null;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { failedLoginAttempts: attempts, lockedUntil },
+          });
+          return null;
+        }
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            lastLoginAt: new Date(),
+          },
+        });
+
+        const role = isRole(user.role) ? user.role : ROLES.COACH;
+        const athleteId = await resolveAthleteId(user.id, role);
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role,
+          athleteId,
+        } as NextAuthUser & { role: Role; athleteId: string | null };
+      },
     }),
   ],
-  pages: {
-    signIn: "/signin",
-    error: "/signin",
-  },
   callbacks: {
-    async signIn({ user, profile }) {
-      const email = extractEmail(user, profile);
-      if (!email) return false;
-
-      const allowed = parseAllowedCoachEmails();
-      if (allowed.length === 0) return true; // open to any Entra user
-
-      const ownerEmail = process.env.OWNER_EMAIL?.trim().toLowerCase();
-      const normalized = email.trim().toLowerCase();
-      return normalized === ownerEmail || allowed.includes(normalized);
-    },
-
-    async jwt({ token, user, profile }) {
-      // Only touch the database on initial sign-in (when `user` is present).
+    async jwt({ token, user }) {
       if (user) {
-        const email = extractEmail(user, profile);
-        if (email) {
-          const role = resolveRole(email);
-          const dbUser = await prisma.user.upsert({
-            where: { email },
-            update: {
-              name: user.name ?? undefined,
-              image: user.image ?? undefined,
-              role,
-            },
-            create: {
-              email,
-              name: user.name ?? null,
-              image: user.image ?? null,
-              role,
-            },
-          });
-
-          token.userId = dbUser.id;
-          token.role = role;
-
-          if (role === ROLES.OWNER) {
-            const athlete = await prisma.athlete.upsert({
-              where: { ownerUserId: dbUser.id },
-              update: {},
-              create: {
-                ownerUserId: dbUser.id,
-                displayName: dbUser.name ?? "Athlete",
-              },
-              select: { id: true },
-            });
-            token.athleteId = athlete.id;
-          } else {
-            token.athleteId = await findActiveAthleteId();
-          }
-        }
+        const u = user as NextAuthUser & {
+          role: Role;
+          athleteId: string | null;
+        };
+        token.userId = u.id;
+        token.role = u.role;
+        token.athleteId = u.athleteId;
       }
       return token;
     },
-
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.userId ?? "";
@@ -138,9 +143,7 @@ export interface AuthContext {
   athleteId: string | null;
 }
 
-/**
- * Require an authenticated session. Throws AuthenticationError if not signed in.
- */
+/** Require an authenticated session. Throws AuthenticationError if not signed in. */
 export async function requireAuth(): Promise<AuthContext> {
   const session = await getServerAuthSession();
   if (!session?.user?.id) {
@@ -155,9 +158,7 @@ export async function requireAuth(): Promise<AuthContext> {
   };
 }
 
-/**
- * Require an authenticated OWNER. Throws AuthorizationError for coaches.
- */
+/** Require an authenticated OWNER. Throws AuthorizationError for coaches. */
 export async function requireOwner(): Promise<AuthContext> {
   const ctx = await requireAuth();
   if (ctx.role !== ROLES.OWNER) {
