@@ -1,6 +1,7 @@
-// AI provider seam. Interpretation always uses the deterministic parser (safe,
-// no key required). When Azure OpenAI is configured, it can be layered in later
-// WITHOUT changing business logic — proposals stay the same validated shape.
+// AI provider seam. Interpretation always falls back to the deterministic
+// parser (safe, no dependency). When Azure OpenAI is configured, Violet uses it
+// via Entra managed-identity token auth (the account has API-key auth disabled
+// by policy) — proposals stay the same validated shape either way.
 
 export interface AiConfig {
   provider: string;
@@ -10,7 +11,7 @@ export interface AiConfig {
 export function getAiConfig(): AiConfig {
   const provider = process.env.AI_PROVIDER || "azure-openai";
   const hasCredentials = Boolean(
-    process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT
+    process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_DEPLOYMENT
   );
   return { provider, hasCredentials };
 }
@@ -29,20 +30,17 @@ export function aiModelLabel(): string | null {
 export interface AzureOpenAiConfig {
   endpoint: string;
   deployment: string;
-  apiKey: string;
   apiVersion: string;
 }
 
 /** Resolved Azure OpenAI settings, or null when the app should use the parser. */
 export function getAzureOpenAiConfig(): AzureOpenAiConfig | null {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
-  if (!endpoint || !apiKey || !deployment) return null;
+  if (!endpoint || !deployment) return null;
   return {
     endpoint: endpoint.endsWith("/") ? endpoint : `${endpoint}/`,
     deployment,
-    apiKey,
     apiVersion: process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
   };
 }

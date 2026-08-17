@@ -7,6 +7,7 @@
 // back to the parser. This file is the only IO in the AI interpretation path.
 
 import { z } from "zod";
+import { DefaultAzureCredential } from "@azure/identity";
 
 import type { ParsedImport } from "@/lib/whatsapp-parser";
 import { getAzureOpenAiConfig } from "@/ai/client";
@@ -17,6 +18,14 @@ import {
 } from "@/ai/interpret";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const AOAI_SCOPE = "https://cognitiveservices.azure.com/.default";
+
+// Reused so MSAL token caching kicks in across requests.
+let credential: DefaultAzureCredential | null = null;
+function getCredential(): DefaultAzureCredential {
+  if (!credential) credential = new DefaultAzureCredential();
+  return credential;
+}
 
 const extractionSchema = z.object({
   reply: z.string().max(500).optional().default(""),
@@ -97,12 +106,19 @@ export async function interpretMessageWithAi(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    // Managed-identity (Entra) auth — the account has API-key auth disabled.
+    const token = await getCredential().getToken(AOAI_SCOPE);
+    if (!token?.token) return null;
+
     const url = `${cfg.endpoint}openai/deployments/${encodeURIComponent(
       cfg.deployment
     )}/chat/completions?api-version=${cfg.apiVersion}`;
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "api-key": cfg.apiKey },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token.token}`,
+      },
       signal: controller.signal,
       body: JSON.stringify({
         temperature: 0,
