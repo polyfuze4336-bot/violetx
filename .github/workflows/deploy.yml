@@ -27,6 +27,9 @@ jobs:
     name: Build, migrate & deploy
     runs-on: ubuntu-latest
     environment: production
+    env:
+      AZURE_RESOURCE_GROUP: rg-violetx
+      AZURE_SQL_SERVER: violetx-sql-v6s4btstixeoe
 
     steps:
       - name: Checkout
@@ -44,15 +47,34 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Azure SQL only allows Azure services + explicit IPs. Open the runner's
+      # public IP just for the migration, then always remove it.
+      - name: Open SQL firewall for runner
+        run: |
+          set -e
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "Runner IP: $RUNNER_IP"
+          az sql server firewall-rule create -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" -o none
+
       - name: Apply database migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Close SQL firewall for runner
+        if: always()
+        run: az sql server firewall-rule delete -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" -o none || true
+
       - name: Build (standalone)
         run: npm run build
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
 
       - name: Assemble deployment package
@@ -67,13 +89,6 @@ jobs:
           cp -r prisma deploy/prisma
           mkdir -p deploy/node_modules
           if [ -d node_modules/.prisma ]; then cp -r node_modules/.prisma deploy/node_modules/.prisma; fi
-
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
