@@ -25,3 +25,24 @@ export function aiModelLabel(): string | null {
   const { hasCredentials } = getAiConfig();
   return hasCredentials ? process.env.AZURE_OPENAI_DEPLOYMENT || null : null;
 }
+
+export interface AzureOpenAiConfig {
+  endpoint: string;
+  deployment: string;
+  apiKey: string;
+  apiVersion: string;
+}
+
+/** Resolved Azure OpenAI settings, or null when the app should use the parser. */
+export function getAzureOpenAiConfig(): AzureOpenAiConfig | null {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const apiKey = process.env.AZURE_OPENAI_API_KEY;
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
+  if (!endpoint || !apiKey || !deployment) return null;
+  return {
+    endpoint: endpoint.endsWith("/") ? endpoint : `${endpoint}/`,
+    deployment,
+    apiKey,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+  };
+}

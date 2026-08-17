@@ -4,6 +4,7 @@
 import {
   parseWhatsAppMessage,
   resolveMeasurementUnit,
+  type ParsedImport,
   type Unit,
 } from "@/lib/whatsapp-parser";
 
@@ -57,7 +58,20 @@ export function interpretMessage(
   ctx: InterpretContext,
   now: Date = new Date()
 ): VioletInterpretation {
-  const parsed = parseWhatsAppMessage(text, now);
+  return buildInterpretation(parseWhatsAppMessage(text, now), ctx);
+}
+
+/**
+ * Turn a structured extraction (from the parser OR the LLM) into confidence-
+ * scored proposals. Shared so parser and AI paths behave identically and stay
+ * safe: the output is always validated, editable data — never executable
+ * instructions. `replyOverride` lets the AI supply a conversational reply.
+ */
+export function buildInterpretation(
+  parsed: ParsedImport,
+  ctx: InterpretContext,
+  replyOverride?: string
+): VioletInterpretation {
   const typeByName = new Map(
     ctx.measurementTypes.map((t) => [t.name.toLowerCase(), t.defaultUnit])
   );
@@ -109,7 +123,9 @@ export function interpretMessage(
   }
 
   let reply: string;
-  if (parts.length === 0) {
+  if (replyOverride && replyOverride.trim()) {
+    reply = replyOverride.trim();
+  } else if (parts.length === 0) {
     reply =
       "I couldn't find any measurements or workout records in that message. Try including something like \"Waist 38.5\" or \"Hip abduction 9x50kg\".";
   } else {

@@ -8,8 +8,9 @@ import { exerciseService } from "@/lib/services/exercise";
 import { athleteService } from "@/lib/services/athlete";
 import { importService, type ImportSummary } from "@/lib/services/import";
 import { interpretMessage, type VioletInterpretation } from "@/ai/interpret";
+import { interpretMessageWithAi } from "@/ai/llm";
 import { detectInjection } from "@/ai/safety";
-import { aiModelLabel, aiProviderLabel } from "@/ai/client";
+import { aiModelLabel, aiProviderLabel, getAiConfig } from "@/ai/client";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
 import { trackEvent } from "@/lib/telemetry";
 import type { Resolution, Unit } from "@/lib/schemas";
@@ -35,16 +36,26 @@ export async function violetInterpretAction(
       athleteService.getProfile(),
     ]);
 
-    const interpretation = interpretMessage(text, {
+    const interpretCtx = {
       measurementTypes: types.map((t) => ({
         name: t.name,
         defaultUnit: t.defaultUnit,
       })),
       defaultMeasurementUnit: profile.defaultMeasurementUnit,
       knownExercises: exercises.filter((e) => e.active).map((e) => e.name),
-    });
+    };
 
-    return { ...interpretation, provider: aiProviderLabel() };
+    // Prefer the LLM when configured; fall back to the deterministic parser on
+    // any failure so Violet always responds and stays safe.
+    let interpretation: VioletInterpretation | null = null;
+    let provider = "violet-parser";
+    if (getAiConfig().hasCredentials) {
+      interpretation = await interpretMessageWithAi(text, interpretCtx);
+      if (interpretation) provider = aiProviderLabel();
+    }
+    if (!interpretation) interpretation = interpretMessage(text, interpretCtx);
+
+    return { ...interpretation, provider };
   });
 }
 
