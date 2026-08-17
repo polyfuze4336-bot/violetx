@@ -42,3 +42,7 @@ next-env.d.ts
 
 # azure
 .azure/
+
+# Deploy artifacts / scratch
+/deploy/
+/deploy.zip

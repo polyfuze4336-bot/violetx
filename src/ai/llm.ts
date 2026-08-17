@@ -7,7 +7,6 @@
 // back to the parser. This file is the only IO in the AI interpretation path.
 
 import { z } from "zod";
-import { DefaultAzureCredential } from "@azure/identity";
 
 import type { ParsedImport } from "@/lib/whatsapp-parser";
 import { getAzureOpenAiConfig } from "@/ai/client";
@@ -18,13 +17,41 @@ import {
 } from "@/ai/interpret";
 
 const REQUEST_TIMEOUT_MS = 15_000;
-const AOAI_SCOPE = "https://cognitiveservices.azure.com/.default";
+const AOAI_RESOURCE = "https://cognitiveservices.azure.com";
 
-// Reused so MSAL token caching kicks in across requests.
-let credential: DefaultAzureCredential | null = null;
-function getCredential(): DefaultAzureCredential {
-  if (!credential) credential = new DefaultAzureCredential();
-  return credential;
+// Cached App Service managed-identity token (epoch seconds expiry).
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+/**
+ * Get an Entra token for Azure OpenAI from the App Service managed-identity
+ * endpoint using plain fetch (no SDK to bundle). Returns null off App Service
+ * or on any failure, so the caller falls back to the parser.
+ */
+async function getManagedIdentityToken(): Promise<string | null> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedToken && cachedToken.expiresAt - 60 > now) return cachedToken.value;
+
+  const endpoint = process.env.IDENTITY_ENDPOINT;
+  const header = process.env.IDENTITY_HEADER;
+  if (!endpoint || !header) return null;
+
+  try {
+    const url = `${endpoint}?resource=${AOAI_RESOURCE}&api-version=2019-08-01`;
+    const res = await fetch(url, { headers: { "X-IDENTITY-HEADER": header } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      access_token?: string;
+      expires_on?: string | number;
+    };
+    if (!data.access_token) return null;
+    cachedToken = {
+      value: data.access_token,
+      expiresAt: Number(data.expires_on) || now + 300,
+    };
+    return cachedToken.value;
+  } catch {
+    return null;
+  }
 }
 
 const extractionSchema = z.object({
@@ -107,8 +134,8 @@ export async function interpretMessageWithAi(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     // Managed-identity (Entra) auth — the account has API-key auth disabled.
-    const token = await getCredential().getToken(AOAI_SCOPE);
-    if (!token?.token) return null;
+    const token = await getManagedIdentityToken();
+    if (!token) return null;
 
     const url = `${cfg.endpoint}openai/deployments/${encodeURIComponent(
       cfg.deployment
@@ -117,7 +144,7 @@ export async function interpretMessageWithAi(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token.token}`,
+        Authorization: `Bearer ${token}`,
       },
       signal: controller.signal,
       body: JSON.stringify({
