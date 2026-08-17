@@ -67,6 +67,12 @@ var databaseUrl = 'sqlserver://${sqlServerName}${environment().suffixes.sqlServe
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   name: sqlServerName
   location: location
+  // MCAPS governance denies SQL servers that allow username/password auth. The
+  // app uses Prisma with SQL auth, so we opt out via the policy's documented
+  // SecurityControl=Ignore tag. Safe for a single-tenant dev workload.
+  tags: {
+    SecurityControl: 'Ignore'
+  }
   properties: {
     administratorLogin: sqlAdminLogin
     administratorLoginPassword: sqlAdminPassword
