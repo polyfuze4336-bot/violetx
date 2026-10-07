@@ -1,4 +1,5 @@
 import {
+  LineChart,
   BarChart3,
   HeartPulse,
   Target,
@@ -54,6 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     bottomNav: true,
   },
+  { href: "/dashboard/analytics", label: "Analytics", icon: LineChart },
   { href: "/dashboard/weight", label: "Body weight", icon: TrendingUp },
   {
     href: "/dashboard/strength",
