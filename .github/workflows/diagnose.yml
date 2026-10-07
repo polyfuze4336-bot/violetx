@@ -22,7 +22,8 @@ jobs:
       - name: Recent exceptions
         run: |
           az config set extension.use_dynamic_install=yes_without_prompt extension.dynamic_install_allow_preview=true >/dev/null
-          az monitor app-insights query -g rg-violetx --app violetx-ai --offset 3h \
-            --analytics-query "exceptions | order by timestamp desc | take 8 | project timestamp, type, outerMessage=substring(outerMessage,0,700), problemId" -o json || true
-          az monitor app-insights query -g rg-violetx --app violetx-ai --offset 3h \
-            --analytics-query "requests | where success == false | order by timestamp desc | take 8 | project timestamp, name, resultCode, duration" -o json || true
+          q() { az monitor app-insights query -g rg-violetx --app violetx-ai --offset 6h --analytics-query "$1" -o tsv 2>/dev/null || true; }
+          echo "== POST requests"; q "requests | where name startswith 'POST' | order by timestamp desc | take 25 | project timestamp, name, resultCode, duration"
+          echo "== failed dependencies"; q "dependencies | where success == false | order by timestamp desc | take 15 | project timestamp, type, name=substring(name,0,80), resultCode, duration"
+          echo "== exceptions"; q "exceptions | order by timestamp desc | take 10 | project timestamp, type, msg=substring(replace_string(outerMessage,'\n',' '),0,500)"
+          echo "== traces"; q "traces | where severityLevel >= 3 | order by timestamp desc | take 10 | project timestamp, msg=substring(replace_string(message,'\n',' '),0,500)"
