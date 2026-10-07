@@ -54,8 +54,9 @@ export type ExerciseEntryRows = Awaited<
 
 /** Session-free derivation, also used by the read-only coach share view. */
 export function derivePersonalRecords(
-  entries: ExerciseEntryRows
+  allEntries: ExerciseEntryRows
 ): PersonalRecordDTO[] {
+  const entries = allEntries.filter((e) => e.setType !== "WARMUP");
   const byExercise = new Map<
     string,
     {
@@ -128,7 +129,9 @@ export function derivePersonalRecords(
 
 export function derivePrEvents(entries: ExerciseEntryRows): PrEventDTO[] {
   return detectPrEvents(
-    entries.map((e) => ({
+    entries
+      .filter((e) => e.setType !== "WARMUP")
+      .map((e) => ({
       exerciseId: e.exerciseId,
       exerciseName: e.exercise?.name ?? "",
       date: e.date.toISOString(),

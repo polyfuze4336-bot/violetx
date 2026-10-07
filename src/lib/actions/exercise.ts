@@ -67,3 +67,14 @@ export async function deleteExerciseEntryAction(
   if (result.ok) revalidate();
   return result;
 }
+
+export async function seedStarterLibraryAction(): Promise<
+  ActionResult<{ created: number; skipped: number }>
+> {
+  const result = await runAction(() => exerciseService.seedStarterLibrary());
+  if (result.ok) {
+    revalidatePath("/dashboard/exercises");
+    revalidatePath("/dashboard/settings");
+  }
+  return result;
+}

@@ -59,7 +59,9 @@ async function loadRows(): Promise<{ rows: TrainingSet[]; prEvents: ReturnType<t
   const { athleteId } = await requireViewerAthlete();
   const entries = await exerciseEntryRepository.list(athleteId);
   return {
-    rows: entries.map((e) => ({
+    rows: entries
+      .filter((e) => e.setType !== "WARMUP")
+      .map((e) => ({
       date: e.date.toISOString(),
       exerciseId: e.exerciseId,
       exerciseName: e.exercise?.name ?? "",

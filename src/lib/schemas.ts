@@ -23,6 +23,14 @@ const optionalNote = z
   .optional()
   .or(z.literal("").transform(() => undefined));
 
+const optionalLong = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .or(z.literal("").transform(() => undefined));
+
 const optionalShort = z
   .string()
   .trim()
@@ -105,6 +113,11 @@ export const createExerciseSchema = z.object({
   category: optionalShort,
   muscleGroup: optionalShort,
   equipment: optionalShort,
+  aliases: optionalLong(400),
+  secondaryMuscles: optionalLong(200),
+  movementPattern: optionalShort,
+  instructions: optionalLong(4000),
+  tips: optionalLong(1000),
   active: z.coerce.boolean().default(true),
 });
 export type CreateExerciseInput = z.infer<typeof createExerciseSchema>;
@@ -115,6 +128,11 @@ export const updateExerciseSchema = z.object({
   category: optionalShort,
   muscleGroup: optionalShort,
   equipment: optionalShort,
+  aliases: optionalLong(400),
+  secondaryMuscles: optionalLong(200),
+  movementPattern: optionalShort,
+  instructions: optionalLong(4000),
+  tips: optionalLong(1000),
   active: z.coerce.boolean().optional(),
 });
 export type UpdateExerciseInput = z.infer<typeof updateExerciseSchema>;

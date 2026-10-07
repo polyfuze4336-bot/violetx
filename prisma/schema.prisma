@@ -35,10 +35,10 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  ownedAthlete  Athlete?  @relation("AthleteOwner")
-  importBatches ImportBatch[]
+  ownedAthlete      Athlete?             @relation("AthleteOwner")
+  importBatches     ImportBatch[]
   approvedAiActions AIAction[]
-  resetTokens   PasswordResetToken[]
+  resetTokens       PasswordResetToken[]
 
   @@index([role])
 }
@@ -59,19 +59,19 @@ model PasswordResetToken {
 
 /// The athlete whose data is tracked. Owned by exactly one OWNER user.
 model Athlete {
-  id           String   @id @default(cuid())
-  ownerUserId  String   @unique
-  displayName  String   @db.NVarChar(200)
-  heightCm     Decimal? @db.Decimal(5, 1)
-  birthDate    DateTime?
-  sex          String?  @db.NVarChar(16)
-  defaultWeightUnit      String @default("KG") @db.NVarChar(8)
-  defaultMeasurementUnit String @default("CM") @db.NVarChar(8)
-  trustedAiImports       Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  ownerUserId            String    @unique
+  displayName            String    @db.NVarChar(200)
+  heightCm               Decimal?  @db.Decimal(5, 1)
+  birthDate              DateTime?
+  sex                    String?   @db.NVarChar(16)
+  defaultWeightUnit      String    @default("KG") @db.NVarChar(8)
+  defaultMeasurementUnit String    @default("CM") @db.NVarChar(8)
+  trustedAiImports       Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  owner            User              @relation("AthleteOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  owner            User               @relation("AthleteOwner", fields: [ownerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   bodyWeights      BodyWeightEntry[]
   measurementTypes MeasurementType[]
   measurements     MeasurementEntry[]
@@ -87,18 +87,18 @@ model Athlete {
 
 /// Body weight over time (always kilograms).
 model BodyWeightEntry {
-  id            String       @id @default(cuid())
+  id            String   @id @default(cuid())
   athleteId     String
   date          DateTime
-  weightKg      Decimal      @db.Decimal(6, 2)
-  note          String?      @db.NVarChar(1024)
-  source        String       @default("MANUAL") @db.NVarChar(16)
+  weightKg      Decimal  @db.Decimal(6, 2)
+  note          String?  @db.NVarChar(1024)
+  source        String   @default("MANUAL") @db.NVarChar(16)
   importBatchId String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  athlete       Athlete      @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  athlete     Athlete      @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, date])
 }
@@ -114,90 +114,142 @@ model MeasurementType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  athlete     Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  entries     MeasurementEntry[]
+  athlete Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries MeasurementEntry[]
 
   @@unique([athleteId, name])
 }
 
 /// A single body-measurement reading. unit is "CM" or "INCH".
 model MeasurementEntry {
-  id            String          @id @default(cuid())
+  id            String   @id @default(cuid())
   athleteId     String
   typeId        String
   date          DateTime
-  value         Decimal         @db.Decimal(6, 2)
-  unit          String          @default("CM") @db.NVarChar(8)
-  note          String?         @db.NVarChar(1024)
-  source        String          @default("MANUAL") @db.NVarChar(16)
+  value         Decimal  @db.Decimal(6, 2)
+  unit          String   @default("CM") @db.NVarChar(8)
+  note          String?  @db.NVarChar(1024)
+  source        String   @default("MANUAL") @db.NVarChar(16)
   importBatchId String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  type          MeasurementType @relation(fields: [typeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  athlete     Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type        MeasurementType @relation(fields: [typeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, typeId, date])
 }
 
 /// Owner-managed exercise definitions.
 model Exercise {
-  id          String   @id @default(cuid())
-  athleteId   String
-  name        String   @db.NVarChar(150)
-  category    String?  @db.NVarChar(60)
-  muscleGroup String?  @db.NVarChar(60)
-  equipment   String?  @db.NVarChar(60)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  athleteId        String
+  name             String   @db.NVarChar(150)
+  category         String?  @db.NVarChar(60)
+  muscleGroup      String?  @db.NVarChar(60)
+  equipment        String?  @db.NVarChar(60)
+  /// Comma-separated alternative names ("OHP, Military Press").
+  aliases          String?  @db.NVarChar(400)
+  /// Comma-separated secondary muscle groups.
+  secondaryMuscles String?  @db.NVarChar(200)
+  movementPattern  String?  @db.NVarChar(40)
+  instructions     String?  @db.NVarChar(Max)
+  tips             String?  @db.NVarChar(1024)
+  /// false = shipped with the starter library; true = user-created.
+  isCustom         Boolean  @default(true)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  athlete   Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  entries   ExerciseEntry[]
+  athlete          Athlete           @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries          ExerciseEntry[]
+  workoutExercises WorkoutExercise[]
 
   @@unique([athleteId, name])
 }
 
-/// A training day. Groups exercise entries by date.
+/// A training day / gym visit. Groups exercise entries by date. Sessions
+/// created by WhatsApp imports are COMPLETED with no start/end time; sessions
+/// logged live through the Active Workout screen start as IN_PROGRESS.
 model WorkoutSession {
-  id            String          @id @default(cuid())
+  id            String    @id @default(cuid())
   athleteId     String
   date          DateTime
-  note          String?         @db.NVarChar(2048)
+  name          String?   @db.NVarChar(120)
+  /// IN_PROGRESS | COMPLETED | SKIPPED
+  status        String    @default("COMPLETED") @db.NVarChar(16)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  gymBranchId   String?
+  /// Overall session RPE (1-10) and perceived difficulty (1-5).
+  sessionRpe    Int?
+  difficulty    Int?
+  note          String?   @db.NVarChar(2048)
   importBatchId String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  entries       ExerciseEntry[]
-  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  athlete     Athlete           @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  gymBranch   GymBranch?        @relation(fields: [gymBranchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries     ExerciseEntry[]
+  exercises   WorkoutExercise[]
+  importBatch ImportBatch?      @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, date])
+  @@index([athleteId, status])
+}
+
+/// An exercise performed (or planned/skipped) within a live workout, with its
+/// order, optional superset grouping and notes. Its sets are ExerciseEntry rows.
+model WorkoutExercise {
+  id            String   @id @default(cuid())
+  athleteId     String
+  sessionId     String
+  exerciseId    String
+  sortOrder     Int      @default(0)
+  supersetGroup Int?
+  notes         String?  @db.NVarChar(1024)
+  skipped       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  session  WorkoutSession  @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exercise Exercise        @relation(fields: [exerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sets     ExerciseEntry[]
+
+  @@index([sessionId, sortOrder])
+  @@index([athleteId, exerciseId])
 }
 
 /// One performed set: reps x weightKg for an exercise on a date.
 /// e.g. "Hip abduction 9x50kg" => reps=9, weightKg=50.
 model ExerciseEntry {
-  id            String          @id @default(cuid())
-  athleteId     String
-  exerciseId    String
-  sessionId     String?
-  date          DateTime
-  reps          Int
-  weightKg      Decimal         @db.Decimal(6, 2)
-  sets          Int?
-  position      Int             @default(0)
-  note          String?         @db.NVarChar(1024)
-  source        String          @default("MANUAL") @db.NVarChar(16)
-  importBatchId String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                String    @id @default(cuid())
+  athleteId         String
+  exerciseId        String
+  sessionId         String?
+  date              DateTime
+  reps              Int
+  weightKg          Decimal   @db.Decimal(6, 2)
+  sets              Int?
+  position          Int       @default(0)
+  /// WORK | WARMUP | DROP | FAILURE. Warm-up sets never count towards PRs/volume.
+  setType           String    @default("WORK") @db.NVarChar(12)
+  rpe               Decimal?  @db.Decimal(3, 1)
+  rir               Int?
+  completedAt       DateTime?
+  workoutExerciseId String?
+  note              String?   @db.NVarChar(1024)
+  source            String    @default("MANUAL") @db.NVarChar(16)
+  importBatchId     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  athlete       Athlete         @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  exercise      Exercise        @relation(fields: [exerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  session       WorkoutSession? @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  importBatch   ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  athlete         Athlete          @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exercise        Exercise         @relation(fields: [exerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  session         WorkoutSession?  @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workoutExercise WorkoutExercise? @relation(fields: [workoutExerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  importBatch     ImportBatch?     @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, exerciseId, date])
   @@index([athleteId, date])
@@ -213,7 +265,7 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, date])
 }
@@ -221,15 +273,15 @@ model Note {
 /// Audit + grouping record for a WhatsApp import. Also serves as the AI import
 /// session (originalText/detectedDate/status + optional aiProvider/model).
 model ImportBatch {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   athleteId   String
   createdById String
-  rawText     String   @db.NVarChar(Max)
+  rawText     String    @db.NVarChar(Max)
   sourceDate  DateTime?
-  status      String   @default("COMMITTED") @db.NVarChar(20)
-  aiProvider  String?  @db.NVarChar(40)
-  model       String?  @db.NVarChar(80)
-  createdAt   DateTime @default(now())
+  status      String    @default("COMMITTED") @db.NVarChar(20)
+  aiProvider  String?   @db.NVarChar(40)
+  model       String?   @db.NVarChar(80)
+  createdAt   DateTime  @default(now())
 
   athlete      Athlete            @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdBy    User               @relation(fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -264,21 +316,22 @@ model AIAction {
 /// An Anytime Fitness Malaysia branch. Totals come from this table — never
 /// hardcode branch counts. Sourced from a locally controlled dataset.
 model GymBranch {
-  id              String   @id @default(cuid())
-  name            String   @db.NVarChar(200)
-  address         String?  @db.NVarChar(400)
-  city            String?  @db.NVarChar(120)
-  state           String   @db.NVarChar(80)
-  postcode        String?  @db.NVarChar(20)
+  id              String    @id @default(cuid())
+  name            String    @db.NVarChar(200)
+  address         String?   @db.NVarChar(400)
+  city            String?   @db.NVarChar(120)
+  state           String    @db.NVarChar(80)
+  postcode        String?   @db.NVarChar(20)
   latitude        Float
   longitude       Float
-  active          Boolean  @default(true)
-  source          String?  @db.NVarChar(80)
+  active          Boolean   @default(true)
+  source          String?   @db.NVarChar(80)
   sourceUpdatedAt DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  visits GymVisit[]
+  visits   GymVisit[]
+  sessions WorkoutSession[]
 
   @@index([state])
   @@index([active])

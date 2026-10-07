@@ -2,6 +2,7 @@ import {
   exerciseEntryRepository,
   exerciseRepository,
 } from "@/lib/repositories/exercise";
+import { STARTER_EXERCISES, exerciseKeys } from "@/lib/exercise-library";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
 import {
   requireOwnerAthlete,
@@ -52,6 +53,12 @@ export const exerciseService = {
       category: data.category ?? null,
       muscleGroup: data.muscleGroup ?? null,
       equipment: data.equipment ?? null,
+      aliases: data.aliases ?? null,
+      secondaryMuscles: data.secondaryMuscles ?? null,
+      movementPattern: data.movementPattern ?? null,
+      instructions: data.instructions ?? null,
+      tips: data.tips ?? null,
+      isCustom: true,
       active: data.active,
     });
     return toExerciseDTO(created);
@@ -69,9 +76,66 @@ export const exerciseService = {
       ...(data.equipment !== undefined
         ? { equipment: data.equipment ?? null }
         : {}),
+      ...(data.aliases !== undefined ? { aliases: data.aliases ?? null } : {}),
+      ...(data.secondaryMuscles !== undefined
+        ? { secondaryMuscles: data.secondaryMuscles ?? null }
+        : {}),
+      ...(data.movementPattern !== undefined
+        ? { movementPattern: data.movementPattern ?? null }
+        : {}),
+      ...(data.instructions !== undefined
+        ? { instructions: data.instructions ?? null }
+        : {}),
+      ...(data.tips !== undefined ? { tips: data.tips ?? null } : {}),
       ...(data.active !== undefined ? { active: data.active } : {}),
     });
     if (count === 0) throw new NotFoundError("Exercise not found.");
+  },
+
+  /**
+   * Add the starter library. Exercises that already exist (by name or alias,
+   * case-insensitive) are left untouched, so history is never altered.
+   */
+  async seedStarterLibrary(): Promise<{ created: number; skipped: number }> {
+    const { athleteId } = await requireOwnerAthlete();
+    const existing = await exerciseRepository.list(athleteId);
+    const taken = new Set(
+      existing.flatMap((e) => exerciseKeys(e.name, e.aliases))
+    );
+    const category = (g: string) =>
+      g === "Biceps" || g === "Triceps"
+        ? "Arms"
+        : g === "Quads" || g === "Hamstrings" || g === "Calves"
+          ? "Legs"
+          : g === "Glutes & Hips"
+            ? "Glutes"
+            : g;
+    let created = 0;
+    let skipped = 0;
+    for (const ex of STARTER_EXERCISES) {
+      const keys = exerciseKeys(ex.name, ex.aliases);
+      if (keys.some((k) => taken.has(k))) {
+        skipped += 1;
+        continue;
+      }
+      await exerciseRepository.create({
+        athleteId,
+        name: ex.name,
+        category: category(ex.primary),
+        muscleGroup: ex.primary,
+        equipment: ex.equipment,
+        aliases: ex.aliases?.join(", ") ?? null,
+        secondaryMuscles: ex.secondary?.join(", ") ?? null,
+        movementPattern: ex.pattern,
+        instructions: ex.instructions,
+        tips: ex.tips ?? null,
+        isCustom: false,
+        active: true,
+      });
+      keys.forEach((k) => taken.add(k));
+      created += 1;
+    }
+    return { created, skipped };
   },
 
   async delete(id: string): Promise<void> {

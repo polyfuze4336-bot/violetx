@@ -102,6 +102,30 @@ export default async function ExerciseDetailPage({
         progression={detail.progression}
         history={detail.history}
       />
+
+      {(exercise.instructions || exercise.tips || exercise.aliases || exercise.secondaryMuscles) && (
+        <Card className="space-y-3 p-5 text-sm">
+          {exercise.secondaryMuscles && (
+            <p>
+              <span className="font-semibold">Also works: </span>
+              {exercise.secondaryMuscles}
+            </p>
+          )}
+          {exercise.aliases && (
+            <p>
+              <span className="font-semibold">Also called: </span>
+              {exercise.aliases}
+            </p>
+          )}
+          {exercise.instructions && <p className="text-muted-foreground">{exercise.instructions}</p>}
+          {exercise.tips && (
+            <p className="rounded-lg bg-primary/5 p-3">
+              <span className="font-semibold">Tip: </span>
+              {exercise.tips}
+            </p>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

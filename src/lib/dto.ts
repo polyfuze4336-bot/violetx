@@ -66,6 +66,12 @@ export interface ExerciseDTO {
   category: string | null;
   muscleGroup: string | null;
   equipment: string | null;
+  aliases: string | null;
+  secondaryMuscles: string | null;
+  movementPattern: string | null;
+  instructions: string | null;
+  tips: string | null;
+  isCustom: boolean;
   active: boolean;
 }
 
@@ -143,6 +149,12 @@ export function toExerciseDTO(e: Exercise): ExerciseDTO {
     category: e.category,
     muscleGroup: e.muscleGroup,
     equipment: e.equipment,
+    aliases: e.aliases,
+    secondaryMuscles: e.secondaryMuscles,
+    movementPattern: e.movementPattern,
+    instructions: e.instructions,
+    tips: e.tips,
+    isCustom: e.isCustom,
     active: e.active,
   };
 }
