@@ -4,6 +4,7 @@ import { exerciseEntryRepository, exerciseRepository } from "@/lib/repositories/
 import { programRepository, type ProgramWithTemplates } from "@/lib/repositories/program";
 import { requireOwnerAthlete, requireViewerAthlete } from "@/lib/services/context";
 import { derivePersonalRecords } from "@/lib/services/personalRecord";
+import { weekdayIn } from "@/lib/dates";
 import { exerciseKeys } from "@/lib/exercise-library";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
 import {
@@ -278,7 +279,7 @@ export const programService = {
     const pick = pickTodayTemplate(
       dto.templates.map((t, i) => ({ ...t, dayOrder: i })),
       last?.templateId ?? null,
-      now.getDay()
+      weekdayIn(now)
     );
     return pick
       ? {

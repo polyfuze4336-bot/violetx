@@ -84,6 +84,8 @@ model Athlete {
   nutritionEntries NutritionEntry[]
   coachShareLinks  CoachShareLink[]
   workoutPrograms  WorkoutProgram[]
+  goals            Goal[]
+  checkIns         DailyCheckIn[]
   aiProposals      AIProposalLog[]
 }
 
@@ -486,4 +488,57 @@ model AIProposalLog {
   athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, createdAt])
+}
+
+/// A fitness goal. Progress is always computed from recorded data; startValue
+/// is captured at creation so the trajectory has a fixed reference point.
+model Goal {
+  id           String    @id @default(cuid())
+  athleteId    String
+  /// BODY_WEIGHT | WAIST | STRENGTH | WORKOUT_FREQUENCY | CONSISTENCY | CUSTOM
+  type         String    @db.NVarChar(24)
+  title        String    @db.NVarChar(120)
+  exerciseId   String?
+  startValue   Decimal?  @db.Decimal(9, 2)
+  targetValue  Decimal   @db.Decimal(9, 2)
+  /// Manually maintained current value (CUSTOM goals only).
+  currentValue Decimal?  @db.Decimal(9, 2)
+  /// CONSISTENCY: sessions per week that count as a "consistent" week.
+  weeklyTarget Int?
+  unit         String    @default("") @db.NVarChar(16)
+  startDate    DateTime
+  targetDate   DateTime?
+  /// ACTIVE | ACHIEVED | ARCHIVED
+  status       String    @default("ACTIVE") @db.NVarChar(12)
+  notes        String?   @db.NVarChar(1024)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, status])
+}
+
+/// Optional daily recovery check-in (one per athlete per day). Fitness and
+/// recovery guidance only � never medical advice.
+model DailyCheckIn {
+  id           String   @id @default(cuid())
+  athleteId    String
+  date         DateTime
+  sleepHours   Decimal  @db.Decimal(4, 1)
+  sleepQuality Int
+  energy       Int
+  /// 1 = fresh .. 5 = very sore
+  soreness     Int
+  /// 1 = calm .. 5 = very stressed
+  stress       Int
+  motivation   Int
+  restingHr    Int?
+  notes        String?  @db.NVarChar(1024)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([athleteId, date])
 }
