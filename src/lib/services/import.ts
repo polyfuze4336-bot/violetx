@@ -52,39 +52,55 @@ export const importService = {
           })) > 0
         : false;
 
-    const measurements = await Promise.all(
-      data.measurements.map(async (m) => {
+    // Sequential with per-name caches: a day can hold dozens of sets, and
+    // firing them all at once exhausts the connection pool.
+    const typeIds = new Map<string, string | null>();
+    const measurements: boolean[] = [];
+    for (const m of data.measurements) {
+      const key = m.name.toLowerCase();
+      if (!typeIds.has(key)) {
         const type = await prisma.measurementType.findFirst({
           where: { athleteId, name: m.name },
+          select: { id: true },
         });
-        if (!type) return false;
-        return (
-          (await prisma.measurementEntry.count({
-            where: { athleteId, typeId: type.id, date: onDay },
-          })) > 0
-        );
-      })
-    );
+        typeIds.set(key, type?.id ?? null);
+      }
+      const typeId = typeIds.get(key);
+      measurements.push(
+        typeId
+          ? (await prisma.measurementEntry.count({
+              where: { athleteId, typeId, date: onDay },
+            })) > 0
+          : false
+      );
+    }
 
-    const sets = await Promise.all(
-      data.sets.map(async (s) => {
+    const exerciseIds = new Map<string, string | null>();
+    const sets: boolean[] = [];
+    for (const s of data.sets) {
+      const key = s.exercise.toLowerCase();
+      if (!exerciseIds.has(key)) {
         const ex = await prisma.exercise.findFirst({
           where: { athleteId, name: s.exercise },
+          select: { id: true },
         });
-        if (!ex) return false;
-        return (
-          (await prisma.exerciseEntry.count({
-            where: {
-              athleteId,
-              exerciseId: ex.id,
-              reps: s.reps,
-              weightKg: s.weightKg,
-              date: onDay,
-            },
-          })) > 0
-        );
-      })
-    );
+        exerciseIds.set(key, ex?.id ?? null);
+      }
+      const exerciseId = exerciseIds.get(key);
+      sets.push(
+        exerciseId
+          ? (await prisma.exerciseEntry.count({
+              where: {
+                athleteId,
+                exerciseId,
+                reps: s.reps,
+                weightKg: s.weightKg,
+                date: onDay,
+              },
+            })) > 0
+          : false
+      );
+    }
 
     return { weight, measurements, sets };
   },
@@ -99,6 +115,10 @@ export const importService = {
     const data = commitImportSchema.parse(input);
     const { start, next } = dayRange(data.date);
     const onDay = { gte: start, lt: next };
+
+    // Resolve each type/exercise once per import instead of per row.
+    const typeCache = new Map<string, { id: string }>();
+    const exerciseCache = new Map<string, { id: string }>();
 
     return prisma.$transaction(async (tx) => {
       const batch = await tx.importBatch.create({
@@ -158,15 +178,19 @@ export const importService = {
           summary.skipped += 1;
           continue;
         }
-        let type = await tx.measurementType.findFirst({
-          where: { athleteId, name: meas.name },
-        });
+        const typeKey = meas.name.toLowerCase();
+        let type =
+          typeCache.get(typeKey) ??
+          (await tx.measurementType.findFirst({
+            where: { athleteId, name: meas.name },
+          }));
         if (!type) {
           type = await tx.measurementType.create({
             data: { athleteId, name: meas.name, defaultUnit: meas.unit },
           });
           summary.newMeasurementTypes.push(meas.name);
         }
+        typeCache.set(typeKey, type);
         if (meas.resolution === "REPLACE") {
           const del = await tx.measurementEntry.deleteMany({
             where: { athleteId, typeId: type.id, date: onDay },
@@ -193,15 +217,19 @@ export const importService = {
           summary.skipped += 1;
           continue;
         }
-        let exercise = await tx.exercise.findFirst({
-          where: { athleteId, name: set.exercise },
-        });
+        const exerciseKey = set.exercise.toLowerCase();
+        let exercise =
+          exerciseCache.get(exerciseKey) ??
+          (await tx.exercise.findFirst({
+            where: { athleteId, name: set.exercise },
+          }));
         if (!exercise) {
           exercise = await tx.exercise.create({
             data: { athleteId, name: set.exercise },
           });
           summary.newExercises.push(set.exercise);
         }
+        exerciseCache.set(exerciseKey, exercise);
         if (set.resolution === "REPLACE") {
           const del = await tx.exerciseEntry.deleteMany({
             where: {
@@ -231,7 +259,7 @@ export const importService = {
       }
 
       return summary;
-    });
+    }, { maxWait: 20_000, timeout: 60_000 });
   },
 
   /**

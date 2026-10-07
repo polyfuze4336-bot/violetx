@@ -27,7 +27,7 @@ let cachedToken: { value: string; expiresAt: number } | null = null;
  * endpoint using plain fetch (no SDK to bundle). Returns null off App Service
  * or on any failure, so the caller falls back to the parser.
  */
-async function getManagedIdentityToken(): Promise<string | null> {
+export async function getManagedIdentityToken(): Promise<string | null> {
   const now = Math.floor(Date.now() / 1000);
   if (cachedToken && cachedToken.expiresAt - 60 > now) return cachedToken.value;
 

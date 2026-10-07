@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardPaste, Sparkles, Trash2 } from "lucide-react";
 
@@ -288,6 +289,12 @@ export function ImportClient({
                 {summary.newExercises.length > 0 &&
                   ` · new exercises: ${summary.newExercises.join(", ")}`}
               </p>
+              <Link
+                href="/dashboard/progress"
+                className="mt-2 inline-block font-medium text-primary hover:underline"
+              >
+                See your training progress →
+              </Link>
             </div>
           </CardContent>
         </Card>

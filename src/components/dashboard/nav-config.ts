@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Dumbbell,
   History,
   Home,
@@ -32,7 +33,13 @@ export const NAV_ITEMS: NavItem[] = [
     ownerOnly: true,
     bottomNav: true,
   },
-  { href: "/dashboard/weight", label: "Progress", icon: TrendingUp },
+  {
+    href: "/dashboard/progress",
+    label: "Training",
+    icon: BarChart3,
+    bottomNav: true,
+  },
+  { href: "/dashboard/weight", label: "Body weight", icon: TrendingUp },
   {
     href: "/dashboard/strength",
     label: "Strength",
@@ -46,7 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Salad,
     ownerOnly: true,
   },
-  { href: "/dashboard/gym", label: "Gym Journey", icon: Map, bottomNav: true },
+  { href: "/dashboard/gym", label: "Gym Journey", icon: Map },
   { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/records", label: "Records", icon: Trophy },
   {

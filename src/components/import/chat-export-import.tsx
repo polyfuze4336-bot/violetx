@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, FileUp, Loader2 } from "lucide-react";
 
@@ -338,6 +339,14 @@ export function ChatExportImport({
               {result.imported} record(s) imported · {result.skipped} duplicate(s)
               skipped
             </p>
+            {result.imported > 0 && (
+              <Link
+                href="/dashboard/progress"
+                className="mt-1 inline-block font-medium text-primary hover:underline"
+              >
+                See your training progress →
+              </Link>
+            )}
             {result.failed.length > 0 && (
               <ul className="mt-2 list-disc pl-5 text-destructive">
                 {result.failed.map((f) => (
