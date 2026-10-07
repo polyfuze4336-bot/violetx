@@ -1,5 +1,6 @@
 "use client";
 
+import { HBarChart } from "@/components/charts/h-bar-chart";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, MapPin, Search, Trophy } from "lucide-react";
@@ -238,6 +239,25 @@ export function GymJourney({
           ))}
         </CardContent>
       </Card>
+
+      {journey.workouts.byGym.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-base">
+              Workouts by gym
+              {journey.workouts.favouriteGymName && (
+                <span className="text-sm font-medium text-muted-foreground">Favourite: {journey.workouts.favouriteGymName}</span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HBarChart data={journey.workouts.byGym.map((g) => ({ name: g.name, value: g.workouts }))} />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {journey.workouts.newGymsLast30Days} new gym{journey.workouts.newGymsLast30Days === 1 ? "" : "s"} in the last 30 days
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Achievements */}
       <Card>

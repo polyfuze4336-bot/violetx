@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { startWorkoutAction } from "@/lib/actions/workout";
 import { ExercisePicker, type PickerExercise } from "@/components/workout/exercise-picker";
+import { GymPicker } from "@/components/workout/gym-picker";
+import type { GymOptionDTO } from "@/lib/services/gym";
 
 function localDate(): string {
   const d = new Date();
@@ -37,6 +39,7 @@ export function StartWorkout({
   const [name, setName] = useState(initialName);
   const [ids, setIds] = useState<string[]>(initialExerciseIds);
   const [busy, setBusy] = useState(false);
+  const [gym, setGym] = useState<GymOptionDTO | null>(null);
   const byId = new Map(library.map((e) => [e.id, e]));
 
   async function start() {
@@ -45,6 +48,7 @@ export function StartWorkout({
       date: localDate(),
       name: name.trim() || undefined,
       templateId,
+      gymBranchId: gym?.id,
       exerciseIds: ids,
     });
     if (res.ok) router.refresh();
@@ -56,6 +60,7 @@ export function StartWorkout({
 
   return (
     <Card className="space-y-4 p-5">
+      <GymPicker value={gym} onChange={setGym} />
       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Workout name (optional)" aria-label="Workout name" maxLength={120} />
       {ids.length > 0 && (
         <ul className="flex flex-wrap gap-2">

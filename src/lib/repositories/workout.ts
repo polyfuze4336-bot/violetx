@@ -145,6 +145,15 @@ export const workoutRepository = {
     });
   },
 
+  /** Completed workouts with the gym they were done at. */
+  gymSessions(athleteId: string) {
+    return prisma.workoutSession.findMany({
+      where: { athleteId, status: "COMPLETED" },
+      select: { date: true, gymBranchId: true },
+      orderBy: { date: "asc" },
+    });
+  },
+
   findGymVisitOnDay(athleteId: string, gymBranchId: string, day: Date) {
     const next = new Date(day);
     next.setUTCDate(next.getUTCDate() + 1);

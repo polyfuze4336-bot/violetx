@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { gymService } from "@/lib/services/gym";
+import { gymService, type GymOptionDTO } from "@/lib/services/gym";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
 
 export async function markGymVisitedAction(
@@ -22,4 +22,12 @@ export async function removeGymVisitAction(
   const result = await runAction(() => gymService.removeVisit(gymBranchId));
   if (result.ok) revalidatePath("/dashboard/gym");
   return result;
+}
+
+export async function searchGymBranchesAction(query: string): Promise<ActionResult<GymOptionDTO[]>> {
+  return runAction(() => gymService.searchBranches(query));
+}
+
+export async function recentGymBranchesAction(): Promise<ActionResult<GymOptionDTO[]>> {
+  return runAction(() => gymService.recentBranches());
 }

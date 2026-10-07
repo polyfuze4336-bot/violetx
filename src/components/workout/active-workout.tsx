@@ -43,6 +43,8 @@ import {
 import { formatDate } from "@/lib/format";
 import { epley } from "@/lib/training-analytics";
 import { ExercisePicker, type PickerExercise } from "@/components/workout/exercise-picker";
+import { GymPicker } from "@/components/workout/gym-picker";
+import type { GymOptionDTO } from "@/lib/services/gym";
 import { PrCelebration, type PrCelebrationData } from "@/components/workout/pr-celebration";
 import { RestTimerBar, useRestTimer, type RestTimerApi } from "@/components/workout/rest-timer";
 import type {
@@ -437,6 +439,7 @@ export function ActiveWorkout({
   const [rpe, setRpe] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [note, setNote] = useState("");
+  const [finishGym, setFinishGym] = useState<GymOptionDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<WorkoutSummaryDTO | null>(null);
 
@@ -457,6 +460,7 @@ export function ActiveWorkout({
       sessionRpe: rpe ?? undefined,
       difficulty: difficulty ?? undefined,
       note: note || undefined,
+      gymBranchId: finishGym?.id,
     });
     setBusy(false);
     if (res.ok) {
@@ -586,6 +590,7 @@ export function ActiveWorkout({
               <p className="mb-1.5 text-sm font-medium">How did it feel? (1 easy – 5 very hard)</p>
               <Chips value={difficulty} onChange={setDifficulty} options={[1, 2, 3, 4, 5]} label="Perceived difficulty" />
             </div>
+            {!workout.gym && <GymPicker value={finishGym} onChange={setFinishGym} />}
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1024} placeholder="Notes (optional)" />
           </div>
           <DialogFooter>
