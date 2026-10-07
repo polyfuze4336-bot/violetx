@@ -34,6 +34,9 @@ directly.
 - 📈 **Trends & charts** — visualise change over time (Recharts, irregular dates).
 - 👥 **Two roles** — Owner (Patient X, full CRUD + AI) and Coach (read-only,
   enforced server-side).
+- 🔗 **Coach share link** — the Owner can create a read-only, expiring, revocable
+  link (`/coach/<token>`) so a coach can view progress without signing in. Only a
+  SHA-256 hash of the token is stored; notes and nutrition are never shared.
 
 ---
 

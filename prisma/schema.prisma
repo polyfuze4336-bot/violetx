@@ -82,6 +82,7 @@ model Athlete {
   importBatches    ImportBatch[]
   gymVisits        GymVisit[]
   nutritionEntries NutritionEntry[]
+  coachShareLinks  CoachShareLink[]
 }
 
 /// Body weight over time (always kilograms).
@@ -321,4 +322,22 @@ model NutritionEntry {
   athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, entryDate])
+}
+
+/// Read-only, revocable, expiring share link that lets a coach view the
+/// athlete's progress without signing in. Only a SHA-256 hash of the secret
+/// token is stored; the raw token is shown to the owner once at creation.
+model CoachShareLink {
+  id           String    @id @default(cuid())
+  athleteId    String
+  tokenHash    String    @unique @db.NVarChar(64)
+  label        String?   @db.NVarChar(100)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  lastViewedAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId])
 }

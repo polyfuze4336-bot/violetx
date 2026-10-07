@@ -268,3 +268,11 @@ export const createNutritionSchema = z.object({
     .or(z.literal("").transform(() => undefined)),
 });
 export type CreateNutritionInput = z.infer<typeof createNutritionSchema>;
+
+// Coach share links ------------------------------------------------------------
+
+export const createShareLinkSchema = z.object({
+  label: z.string().trim().max(100).optional(),
+  expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
+});
+export type CreateShareLinkInput = z.input<typeof createShareLinkSchema>;

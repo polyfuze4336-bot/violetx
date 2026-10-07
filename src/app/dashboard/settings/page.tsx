@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { athleteService } from "@/lib/services/athlete";
 import { measurementService } from "@/lib/services/measurement";
 import { userAdminService } from "@/lib/services/userAdmin";
+import { shareLinkService } from "@/lib/services/shareLink";
 import {
   Card,
   CardContent,
@@ -15,6 +16,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { MeasurementTypeManager } from "@/components/settings/measurement-type-manager";
 import { CoachManager } from "@/components/settings/coach-manager";
+import { ShareLinkManager } from "@/components/settings/share-link-manager";
 import { TrustedImportsToggle } from "@/components/settings/trusted-imports-toggle";
 
 export default async function SettingsPage() {
@@ -23,10 +25,11 @@ export default async function SettingsPage() {
     redirect("/dashboard");
   }
 
-  const [profile, types, coach] = await Promise.all([
+  const [profile, types, coach, shareLinks] = await Promise.all([
     athleteService.getProfile(),
     measurementService.listTypes(),
     userAdminService.getCoach(),
+    shareLinkService.list(),
   ]);
 
   return (
@@ -84,6 +87,19 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <CoachManager coach={coach} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Coach share link</CardTitle>
+            <CardDescription>
+              Let a coach view your progress without signing in. Links are
+              read-only, expire automatically and can be revoked any time.
+              Notes and nutrition are never shared.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ShareLinkManager links={shareLinks} />
           </CardContent>
         </Card>
       </div>
