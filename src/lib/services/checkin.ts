@@ -53,7 +53,7 @@ function toDTO(row: Awaited<ReturnType<typeof checkInRepository.getByDate>> & ob
   };
 }
 
-/** Readiness scores only (no notes or heart rate) — safe for the coach view. */
+/** Readiness scores only (no notes or heart rate) â€” safe for the coach view. */
 export async function readinessHistory(athleteId: string, days = 30, now: Date = new Date()): Promise<{ date: string; score: number }[]> {
   const since = new Date(now.getTime() - days * 86_400_000);
   const rows = await checkInRepository.list(athleteId, since);

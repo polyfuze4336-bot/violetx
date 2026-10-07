@@ -126,9 +126,9 @@ export default async function CoachSharePage({
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Workouts / week" icon={Dumbbell} value={String(data.training.workoutsPerWeek)} hint={`${data.training.workouts} in 3 months`} />
-          <StatCard label="Consistency" icon={Flame} accent="success" value={data.training.consistencyPct !== null ? `${data.training.consistencyPct}%` : "—"} />
-          <StatCard label="Program adherence" icon={Gauge} accent="magenta" value={data.training.adherencePct !== null ? `${data.training.adherencePct}%` : "—"} />
-          <StatCard label="Readiness (latest)" icon={Target} value={data.readiness.length ? String(data.readiness[data.readiness.length - 1].score) : "—"} />
+          <StatCard label="Consistency" icon={Flame} accent="success" value={data.training.consistencyPct !== null ? `${data.training.consistencyPct}%` : "â€”"} />
+          <StatCard label="Program adherence" icon={Gauge} accent="magenta" value={data.training.adherencePct !== null ? `${data.training.adherencePct}%` : "â€”"} />
+          <StatCard label="Readiness (latest)" icon={Target} value={data.readiness.length ? String(data.readiness[data.readiness.length - 1].score) : "â€”"} />
         </section>
 
         {data.goals.length > 0 && (
@@ -142,7 +142,7 @@ export default async function CoachSharePage({
                   <div className="flex items-baseline justify-between text-sm">
                     <span className="font-medium">{g.title}</span>
                     <span className="tabular-nums text-muted-foreground">
-                      {g.current ?? "—"} / {g.target} {g.unit.startsWith("/") ? "" : g.unit}
+                      {g.current ?? "â€”"} / {g.target} {g.unit.startsWith("/") ? "" : g.unit}
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -239,10 +239,10 @@ export default async function CoachSharePage({
                   <li key={i} className="flex items-center justify-between gap-3 py-2">
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{w.name ?? w.exercises.slice(0, 2).join(", ")}</span>
-                      <span className="block text-xs text-muted-foreground">{formatDate(w.date)}{w.durationMin !== null ? ` · ${w.durationMin} min` : ""}</span>
+                      <span className="block text-xs text-muted-foreground">{formatDate(w.date)}{w.durationMin !== null ? ` Â· ${w.durationMin} min` : ""}</span>
                     </span>
                     <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {w.sets} sets · {(w.volumeKg / 1000).toFixed(1)} t
+                      {w.sets} sets Â· {(w.volumeKg / 1000).toFixed(1)} t
                     </span>
                   </li>
                 ))}

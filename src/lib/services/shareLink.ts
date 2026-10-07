@@ -80,7 +80,7 @@ export interface SharedProgressDTO {
     weeklyVolume: { label: string; volumeKg: number }[];
     e1rm: { name: string; changePct: number | null; points: { date: string; e1rm: number }[] }[];
   };
-  /** Readiness scores only — never check-in notes or heart rate. */
+  /** Readiness scores only â€” never check-in notes or heart rate. */
   readiness: { date: string; score: number }[];
   expiresAt: string;
 }
