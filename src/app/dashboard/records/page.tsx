@@ -13,6 +13,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { HBarChart } from "@/components/charts/h-bar-chart";
 import { Sparkline } from "@/components/charts/sparkline";
 import { PrProgress } from "@/components/records/pr-progress";
+import { ProgressMatrix } from "@/components/progress/progress-matrix";
 
 export default async function RecordsPage() {
   const viewer = await requireAuth();
@@ -71,6 +72,13 @@ export default async function RecordsPage() {
           <PrProgress series={series} />
         </CardContent>
       </Card>
+
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <Trophy className="h-4 w-4 text-primary" /> Monthly bests
+        </h2>
+        <ProgressMatrix matrix={history.matrix} />
+      </section>
 
       {latest.length > 0 && (
         <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">

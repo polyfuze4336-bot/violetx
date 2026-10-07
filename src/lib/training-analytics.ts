@@ -315,6 +315,141 @@ export function setsPerDay(rows: TrainingSet[]): Record<string, number> {
   }
   return out;
 }
+
+// --- Progress matrix (exercise x period "best set" table) --------------------
+
+export interface MatrixCell {
+  weightKg: number;
+  reps: number;
+  /** All-time peak within the visible window (lowest load for assisted lifts). */
+  isPr: boolean;
+  /** Better than the previous filled cell in this row. */
+  improved: boolean | null;
+}
+
+export type MatrixTrendKind = "up" | "down" | "flat" | "baseline";
+
+export interface MatrixRow {
+  exerciseId: string;
+  name: string;
+  muscleGroup: MuscleGroup;
+  assisted: boolean;
+  cells: (MatrixCell | null)[];
+  trend: { kind: MatrixTrendKind; deltaKg: number; pct: number | null };
+}
+
+export interface ProgressMatrix {
+  columns: { key: string; label: string; prs: number }[];
+  rows: MatrixRow[];
+}
+
+const isAssisted = (name: string) => /assist/i.test(name);
+
+/**
+ * Best set (heaviest, then most reps) per exercise per period for the last
+ * `count` periods, with PR markers and an overall trend per exercise.
+ */
+export function buildProgressMatrix(
+  rows: TrainingSet[],
+  period: Period,
+  count = 6,
+  now: Date = new Date()
+): ProgressMatrix {
+  const currentStart = periodStart(fmt(now), period);
+  const keys: string[] = [];
+  for (let i = count - 1; i >= 0; i--) keys.push(addPeriods(currentStart, period, -i));
+  const index = new Map(keys.map((k, i) => [k, i]));
+
+  const byExercise = new Map<string, { name: string; muscle: MuscleGroup; best: ({ weightKg: number; reps: number } | null)[]; sets: number }>();
+  for (const r of rows) {
+    const col = index.get(periodStart(isoDay(r.date), period));
+    if (col === undefined) continue;
+    const entry =
+      byExercise.get(r.exerciseId) ??
+      { name: r.exerciseName, muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup), best: keys.map(() => null), sets: 0 };
+    const assisted = isAssisted(r.exerciseName);
+    const cur = entry.best[col];
+    // Assisted lifts: less assistance is better.
+    const better =
+      !cur ||
+      (assisted
+        ? r.weightKg < cur.weightKg || (r.weightKg === cur.weightKg && r.reps > cur.reps)
+        : r.weightKg > cur.weightKg || (r.weightKg === cur.weightKg && r.reps > cur.reps));
+    if (better) entry.best[col] = { weightKg: r.weightKg, reps: r.reps };
+    entry.sets += rowSets(r);
+    byExercise.set(r.exerciseId, entry);
+  }
+
+  const columnPrs = keys.map(() => 0);
+  const out: MatrixRow[] = [];
+  for (const [exerciseId, e] of Array.from(byExercise.entries())) {
+    const assisted = isAssisted(e.name);
+    const filled = e.best.map((b, i) => (b ? i : -1)).filter((i) => i >= 0);
+    if (filled.length === 0) continue;
+
+    let peakIdx = filled[0];
+    for (const i of filled) {
+      const b = e.best[i]!;
+      const p = e.best[peakIdx]!;
+      if (assisted ? b.weightKg < p.weightKg : b.weightKg > p.weightKg) peakIdx = i;
+    }
+
+    let prev: { weightKg: number } | null = null;
+    const cells = e.best.map((b, i) => {
+      if (!b) return null;
+      const improved: boolean | null = prev
+        ? assisted
+          ? b.weightKg < prev.weightKg
+            ? true
+            : b.weightKg > prev.weightKg
+              ? false
+              : null
+          : b.weightKg > prev.weightKg
+            ? true
+            : b.weightKg < prev.weightKg
+              ? false
+              : null
+        : null;
+      prev = b;
+      const isPr = i === peakIdx;
+      if (isPr) columnPrs[i] += 1;
+      return { weightKg: b.weightKg, reps: b.reps, isPr, improved };
+    });
+
+    const first = e.best[filled[0]]!;
+    const last = e.best[filled[filled.length - 1]]!;
+    let trend: MatrixRow["trend"];
+    if (filled.length < 2) trend = { kind: "baseline", deltaKg: 0, pct: null };
+    else {
+      const raw = last.weightKg - first.weightKg;
+      const good = assisted ? -raw : raw;
+      trend = {
+        kind: good > 0 ? "up" : good < 0 ? "down" : "flat",
+        deltaKg: round1(raw),
+        pct: first.weightKg > 0 ? Math.round((raw / first.weightKg) * 100) : null,
+      };
+    }
+    out.push({ exerciseId, name: e.name, muscleGroup: e.muscle, assisted, cells, trend });
+  }
+
+  const order = (g: MuscleGroup) => MUSCLE_GROUPS.indexOf(g);
+  out.sort((a, b) => order(a.muscleGroup) - order(b.muscleGroup) || a.name.localeCompare(b.name));
+
+  return {
+    columns: keys.map((k, i) => ({
+      key: k,
+      label: period === "month" ? fullMonthLabel(k) : `Wk ${periodLabel(k, period)}`,
+      prs: columnPrs[i],
+    })),
+    rows: out,
+  };
+}
+
+const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function fullMonthLabel(start: string): string {
+  const d = toUtc(start);
+  return `${FULL_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
 // --- Rolling 4-week view used for coaching ----------------------------------
 
 export interface RollingWindow {

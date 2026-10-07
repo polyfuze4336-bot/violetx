@@ -5,6 +5,7 @@ import { toNumber } from "@/lib/dto";
 import { derivePrEvents } from "@/lib/services/personalRecord";
 import {
   buildExerciseSeries,
+  buildProgressMatrix,
   buildRuleBasedTips,
   periodStart,
   rollingWindow,
@@ -16,6 +17,7 @@ import {
   type ExerciseSeries,
   type Period,
   type PeriodSummary,
+  type ProgressMatrix,
   type RollingWindow,
   type TrainingSet,
 } from "@/lib/training-analytics";
@@ -28,10 +30,12 @@ export interface TrainingProgressDTO {
   tips: CoachTip[];
   lastTrainingDate: string | null;
   series: ExerciseSeries[];
+  matrix: ProgressMatrix;
 }
 
 export interface TrainingHistoryDTO {
   series: ExerciseSeries[];
+  matrix: ProgressMatrix;
   perDay: Record<string, number>;
   months: (PeriodSummary & { prs: number })[];
   prEvents: ReturnType<typeof derivePrEvents>;
@@ -94,6 +98,7 @@ function compute(
     tips,
     lastTrainingDate,
     series: buildExerciseSeries(rows),
+    matrix: buildProgressMatrix(rows, period, 6, now),
   };
 }
 
@@ -109,6 +114,7 @@ export const trainingProgressService = {
     const { periods } = compute(rows, prEvents, "month", now);
     return {
       series: buildExerciseSeries(rows),
+      matrix: buildProgressMatrix(rows, "month", 6, now),
       perDay: setsPerDay(rows),
       months: periods,
       prEvents,

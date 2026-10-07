@@ -7,37 +7,21 @@ import {
   HYPERTROPHY_SETS_MAX,
   HYPERTROPHY_SETS_MIN,
   MUSCLE_GROUPS,
-  type ExerciseStatus,
   type Period,
 } from "@/lib/training-analytics";
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
 import { ProgressLineChart } from "@/components/charts/line-chart";
 import { CoachTips } from "@/components/progress/coach-tips";
+import { ProgressMatrix } from "@/components/progress/progress-matrix";
 import { MuscleRadar } from "@/components/charts/muscle-radar";
-import { Sparkline } from "@/components/charts/sparkline";
 
-const STATUS_LABEL: Record<ExerciseStatus, { label: string; className: string }> = {
-  progressing: { label: "Progressing", className: "bg-success/15 text-success" },
-  stalled: { label: "Stalled", className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  regressing: { label: "Dropping", className: "bg-destructive/15 text-destructive" },
-  new: { label: "New", className: "bg-muted text-muted-foreground" },
-  inactive: { label: "Inactive", className: "bg-muted text-muted-foreground" },
-};
+
 
 function delta(current: number, previous: number, unit: string): { text: string; trend: "up" | "down" | "neutral" } {
   if (previous === 0) return { text: current > 0 ? "new" : "—", trend: "neutral" };
@@ -65,7 +49,6 @@ export default async function TrainingProgressPage({
   const radarData = MUSCLE_GROUPS.filter((g) => g !== "Other" && data.window.weeklySetsByMuscle[g]).map(
     (g) => ({ muscle: g, sets: data.window.weeklySetsByMuscle[g] ?? 0 })
   );
-  const seriesById = new Map(data.series.map((s) => [s.exerciseId, s]));
 
   const toggle = (
     <div className="inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
@@ -150,6 +133,13 @@ export default async function TrainingProgressPage({
         />
       </section>
 
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <Trophy className="h-4 w-4 text-primary" /> Progress table
+        </h2>
+        <ProgressMatrix matrix={data.matrix} />
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -212,54 +202,6 @@ export default async function TrainingProgressPage({
         </CardContent>
       </Card>
       <CoachTips period={period} initialTips={data.tips} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Exercise progression</CardTitle>
-<CardDescription>Est. strength (Epley), first → latest session</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Exercise</TableHead>
-                <TableHead className="text-right">Sessions</TableHead>
-                <TableHead className="w-28">Trend</TableHead>
-                <TableHead className="text-right">First → latest</TableHead>
-                <TableHead className="text-right">Change</TableHead>
-                <TableHead className="text-right">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.exercises.slice(0, 15).map((e) => (
-                <TableRow key={e.exerciseId}>
-                  <TableCell>
-                    <p className="font-medium">{e.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {e.muscleGroup} · last {formatDate(e.lastPerformed)}
-                    </p>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{e.sessions}</TableCell>
-                  <TableCell>
-                    <Sparkline values={(seriesById.get(e.exerciseId)?.points ?? []).map((p) => p.e1rm)} height={32} color={e.status === "regressing" ? 3 : e.status === "stalled" ? 4 : 1} />
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatNumber(e.firstE1rm)} → {formatNumber(e.latestE1rm)} kg
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {e.changePct === null ? "—" : `${e.changePct > 0 ? "+" : ""}${e.changePct}%`}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge className={cn("border-0", STATUS_LABEL[e.status].className)} variant="secondary">
-                      {STATUS_LABEL[e.status].label}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }

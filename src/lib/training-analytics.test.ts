@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addPeriods,
+  buildProgressMatrix,
   buildExerciseSeries,
   setsPerDay,
   buildRuleBasedTips,
@@ -176,5 +177,45 @@ describe("history series", () => {
 
   it("counts sets per day for the heatmap", () => {
     expect(setsPerDay(rows)).toEqual({ "2026-08-01": 3, "2026-08-08": 1 });
+  });
+});
+
+describe("buildProgressMatrix", () => {
+  const now = new Date("2026-09-20T10:00:00Z");
+  const rows = [
+    set("2026-06-05", "Chest Press (Machine)", 5, 23),
+    set("2026-07-05", "Chest Press (Machine)", 8, 32),
+    set("2026-08-05", "Chest Press (Machine)", 12, 36),
+    set("2026-09-05", "Chest Press (Machine)", 3, 41),
+    set("2026-09-06", "Chest Press (Machine)", 10, 30),
+    set("2026-06-05", "Assisted Chin-Up", 3, 40.8),
+    set("2026-09-05", "Assisted Chin-Up", 12, 34),
+    set("2026-07-10", "Lat Pulldown", 6, 52),
+  ];
+  const m = buildProgressMatrix(rows, "month", 4, now);
+  const byName = Object.fromEntries(m.rows.map((r) => [r.name, r]));
+
+  it("lays out months and picks the heaviest set per month", () => {
+    expect(m.columns.map((c) => c.label)).toEqual(["June 2026", "July 2026", "August 2026", "September 2026"]);
+    const chest = byName["Chest Press (Machine)"];
+    expect(chest.cells[3]).toMatchObject({ weightKg: 41, reps: 3, isPr: true });
+    expect(chest.cells[2]).toMatchObject({ weightKg: 36, reps: 12, isPr: false, improved: true });
+  });
+
+  it("computes the overall trend and baselines", () => {
+    expect(byName["Chest Press (Machine)"].trend).toEqual({ kind: "up", deltaKg: 18, pct: 78 });
+    expect(byName["Lat Pulldown"].trend.kind).toBe("baseline");
+    expect(byName["Lat Pulldown"].cells[1]?.isPr).toBe(true);
+  });
+
+  it("treats less assistance as improvement", () => {
+    const chin = byName["Assisted Chin-Up"];
+    expect(chin.trend.kind).toBe("up");
+    expect(chin.cells[3]?.isPr).toBe(true);
+  });
+
+  it("counts PRs per column", () => {
+    expect(m.columns[3].prs).toBe(2); // chest press + chin-up
+    expect(m.columns[1].prs).toBe(1); // lat pulldown
   });
 });
