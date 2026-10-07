@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Dumbbell,
+  Play,
   History,
   Home,
   Map,
@@ -27,6 +28,14 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: Home, bottomNav: true },
   {
+    href: "/dashboard/workout",
+    label: "Workout",
+    icon: Play,
+    ownerOnly: true,
+    bottomNav: true,
+  },
+  { href: "/dashboard/workouts", label: "Workout log", icon: Dumbbell },
+  {
     href: "/dashboard/coach",
     label: "AI Coach",
     icon: Sparkles,
@@ -44,7 +53,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/strength",
     label: "Strength",
     icon: Dumbbell,
-    bottomNav: true,
   },
   { href: "/dashboard/measurements", label: "Measurements", icon: Ruler },
   {
