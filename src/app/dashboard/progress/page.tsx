@@ -28,6 +28,8 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
 import { ProgressLineChart } from "@/components/charts/line-chart";
 import { CoachTips } from "@/components/progress/coach-tips";
+import { MuscleRadar } from "@/components/charts/muscle-radar";
+import { Sparkline } from "@/components/charts/sparkline";
 
 const STATUS_LABEL: Record<ExerciseStatus, { label: string; className: string }> = {
   progressing: { label: "Progressing", className: "bg-success/15 text-success" },
@@ -59,6 +61,11 @@ export default async function TrainingProgressPage({
   const unit = period === "week" ? "week" : "month";
   const current = data.periods[data.periods.length - 1];
   const previous = data.periods[data.periods.length - 2];
+
+  const radarData = MUSCLE_GROUPS.filter((g) => g !== "Other" && data.window.weeklySetsByMuscle[g]).map(
+    (g) => ({ muscle: g, sets: data.window.weeklySetsByMuscle[g] ?? 0 })
+  );
+  const seriesById = new Map(data.series.map((s) => [s.exerciseId, s]));
 
   const toggle = (
     <div className="inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
@@ -147,8 +154,7 @@ export default async function TrainingProgressPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Training volume</CardTitle>
-            <CardDescription>Reps × weight, per {unit}.</CardDescription>
-          </CardHeader>
+            </CardHeader>
           <CardContent>
             <ProgressLineChart
               data={chartData}
@@ -162,7 +168,6 @@ export default async function TrainingProgressPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sets completed</CardTitle>
-            <CardDescription>Total working sets, per {unit}.</CardDescription>
           </CardHeader>
           <CardContent>
             <ProgressLineChart
@@ -177,54 +182,41 @@ export default async function TrainingProgressPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Weekly sets per muscle group</CardTitle>
-          <CardDescription>
-            Average over the last 4 weeks. Around {HYPERTROPHY_SETS_MIN}–{HYPERTROPHY_SETS_MAX} hard
-            sets per muscle per week is the typical hypertrophy range.
-          </CardDescription>
+          <CardTitle className="text-base">Muscle balance</CardTitle>
+          <CardDescription>Sets per week, last 4 weeks · dashed ring = {HYPERTROPHY_SETS_MIN}-set target</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {MUSCLE_GROUPS.filter((g) => data.window.weeklySetsByMuscle[g]).length === 0 && (
-            <p className="text-sm text-muted-foreground">No training in the last 4 weeks.</p>
+        <CardContent className="grid items-center gap-4 md:grid-cols-2">
+          {radarData.length >= 3 ? (
+            <MuscleRadar data={radarData} target={HYPERTROPHY_SETS_MIN} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Train more muscle groups to see the balance chart.</p>
           )}
-          {MUSCLE_GROUPS.filter((g) => data.window.weeklySetsByMuscle[g]).map((g) => {
-            const sets = data.window.weeklySetsByMuscle[g] ?? 0;
-            const low = sets < HYPERTROPHY_SETS_MIN;
-            const high = sets > HYPERTROPHY_SETS_MAX;
-            const width = Math.min(100, (sets / (HYPERTROPHY_SETS_MAX * 1.25)) * 100);
-            return (
-              <div key={g} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{g}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {sets} sets/wk ·{" "}
-                    {low ? "below range" : high ? "above range" : "in range"}
-                  </span>
-                </div>
-                <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded-full",
-                      low ? "bg-amber-500" : high ? "bg-magenta" : "bg-success"
-                    )}
-                    style={{ width: `${width}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
+          <div className="flex flex-wrap gap-2">
+            {radarData.map((m) => {
+              const low = m.sets < HYPERTROPHY_SETS_MIN;
+              const high = m.sets > HYPERTROPHY_SETS_MAX;
+              return (
+                <span
+                  key={m.muscle}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                    low ? "border-amber-500/40 text-amber-700 dark:text-amber-400" : high ? "border-magenta/40 text-magenta" : "border-success/40 text-success"
+                  )}
+                >
+                  <span className={cn("h-2 w-2 rounded-full", low ? "bg-amber-500" : high ? "bg-magenta" : "bg-success")} />
+                  {m.muscle} <span className="tabular-nums">{m.sets}</span>
+                </span>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
-
       <CoachTips period={period} initialTips={data.tips} />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Exercise progression</CardTitle>
-          <CardDescription>
-            Estimated strength (Epley formula) from your first to latest session — not an actual
-            one-rep max.
-          </CardDescription>
+<CardDescription>Est. strength (Epley), first → latest session</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -232,6 +224,7 @@ export default async function TrainingProgressPage({
               <TableRow>
                 <TableHead>Exercise</TableHead>
                 <TableHead className="text-right">Sessions</TableHead>
+                <TableHead className="w-28">Trend</TableHead>
                 <TableHead className="text-right">First → latest</TableHead>
                 <TableHead className="text-right">Change</TableHead>
                 <TableHead className="text-right">Status</TableHead>
@@ -247,6 +240,9 @@ export default async function TrainingProgressPage({
                     </p>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{e.sessions}</TableCell>
+                  <TableCell>
+                    <Sparkline values={(seriesById.get(e.exerciseId)?.points ?? []).map((p) => p.e1rm)} height={32} color={e.status === "regressing" ? 3 : e.status === "stalled" ? 4 : 1} />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatNumber(e.firstE1rm)} → {formatNumber(e.latestE1rm)} kg
                   </TableCell>

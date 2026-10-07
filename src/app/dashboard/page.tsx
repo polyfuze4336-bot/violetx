@@ -16,6 +16,9 @@ import { bodyWeightService } from "@/lib/services/bodyWeight";
 import { measurementService } from "@/lib/services/measurement";
 import { exerciseService, exerciseEntryService } from "@/lib/services/exercise";
 import { personalRecordService } from "@/lib/services/personalRecord";
+import { trainingProgressService } from "@/lib/services/trainingProgress";
+import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { Sparkline } from "@/components/charts/sparkline";
 import { computeSeriesStats, type SeriesStats } from "@/lib/analytics";
 import {
   formatDate,
@@ -77,6 +80,8 @@ export default async function DashboardOverviewPage() {
       personalRecordService.prEvents(),
       exerciseEntryService.list({ take: 6 }),
     ]);
+
+  const training = await trainingProgressService.history();
 
   // Most recent activity date across all record types.
   const lastUpdatedIso = [
@@ -265,6 +270,24 @@ export default async function DashboardOverviewPage() {
             </div>
           </FadeIn>
 
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">Training activity</CardTitle>
+              <Link
+                href="/dashboard/progress"
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                Training progress <ArrowRight className="h-4 w-4" />
+              </Link>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-[1fr_16rem] md:items-center">
+              <ActivityHeatmap perDay={training.perDay} weeks={20} />
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Volume · 12 months</p>
+                <Sparkline values={training.months.map((m) => m.volumeKg)} height={64} />
+              </div>
+            </CardContent>
+          </Card>
           <div className="grid gap-4 lg:grid-cols-3">
             <RecentPrCard pr={recentPR} />
             <BodyProgressCard items={bodyProgress} />

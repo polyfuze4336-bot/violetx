@@ -266,6 +266,55 @@ export function summarizeExercises(
   return out.sort((a, b) => b.totalSets - a.totalSets);
 }
 
+
+// --- Per-exercise history series ---------------------------------------------
+
+export interface ExerciseSeriesPoint {
+  date: string; // yyyy-mm-dd
+  maxWeightKg: number;
+  e1rm: number;
+}
+
+export interface ExerciseSeries {
+  exerciseId: string;
+  name: string;
+  muscleGroup: MuscleGroup;
+  points: ExerciseSeriesPoint[];
+}
+
+/** Heaviest set and best estimated strength per training day, per exercise. */
+export function buildExerciseSeries(rows: TrainingSet[]): ExerciseSeries[] {
+  const byExercise = new Map<string, { name: string; muscle: MuscleGroup; days: Map<string, ExerciseSeriesPoint> }>();
+  for (const r of rows) {
+    const day = isoDay(r.date);
+    const entry =
+      byExercise.get(r.exerciseId) ??
+      { name: r.exerciseName, muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup), days: new Map() };
+    const p = entry.days.get(day) ?? { date: day, maxWeightKg: 0, e1rm: 0 };
+    p.maxWeightKg = Math.max(p.maxWeightKg, r.weightKg);
+    p.e1rm = Math.max(p.e1rm, round1(epley(r.weightKg, r.reps)));
+    entry.days.set(day, p);
+    byExercise.set(r.exerciseId, entry);
+  }
+  return Array.from(byExercise.entries())
+    .map(([exerciseId, v]) => ({
+      exerciseId,
+      name: v.name,
+      muscleGroup: v.muscle,
+      points: Array.from(v.days.values()).sort((a, b) => a.date.localeCompare(b.date)),
+    }))
+    .sort((a, b) => b.points.length - a.points.length);
+}
+
+/** Distinct training days → total sets that day (for activity heatmaps). */
+export function setsPerDay(rows: TrainingSet[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const day = isoDay(r.date);
+    out[day] = (out[day] ?? 0) + rowSets(r);
+  }
+  return out;
+}
 // --- Rolling 4-week view used for coaching ----------------------------------
 
 export interface RollingWindow {

@@ -4,13 +4,16 @@ import { requireViewerAthlete } from "@/lib/services/context";
 import { toNumber } from "@/lib/dto";
 import { derivePrEvents } from "@/lib/services/personalRecord";
 import {
+  buildExerciseSeries,
   buildRuleBasedTips,
   periodStart,
   rollingWindow,
+  setsPerDay,
   summarizeExercises,
   summarizePeriods,
   type CoachTip,
   type ExerciseProgress,
+  type ExerciseSeries,
   type Period,
   type PeriodSummary,
   type RollingWindow,
@@ -24,6 +27,14 @@ export interface TrainingProgressDTO {
   exercises: ExerciseProgress[];
   tips: CoachTip[];
   lastTrainingDate: string | null;
+  series: ExerciseSeries[];
+}
+
+export interface TrainingHistoryDTO {
+  series: ExerciseSeries[];
+  perDay: Record<string, number>;
+  months: (PeriodSummary & { prs: number })[];
+  prEvents: ReturnType<typeof derivePrEvents>;
 }
 
 export interface AiTipsDTO {
@@ -82,6 +93,7 @@ function compute(
     exercises,
     tips,
     lastTrainingDate,
+    series: buildExerciseSeries(rows),
   };
 }
 
@@ -89,6 +101,18 @@ export const trainingProgressService = {
   async get(period: Period, now: Date = new Date()): Promise<TrainingProgressDTO> {
     const { rows, prEvents } = await loadRows();
     return { period, ...compute(rows, prEvents, period, now) };
+  },
+
+  /** Chart data for the Records and History pages. */
+  async history(now: Date = new Date()): Promise<TrainingHistoryDTO> {
+    const { rows, prEvents } = await loadRows();
+    const { periods } = compute(rows, prEvents, "month", now);
+    return {
+      series: buildExerciseSeries(rows),
+      perDay: setsPerDay(rows),
+      months: periods,
+      prEvents,
+    };
   },
 
   /** AI tips from aggregated numbers only; falls back to the rule-based tips. */

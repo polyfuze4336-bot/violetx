@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   addPeriods,
+  buildExerciseSeries,
+  setsPerDay,
   buildRuleBasedTips,
   epley,
   inferMuscleGroup,
@@ -155,5 +157,24 @@ describe("buildRuleBasedTips", () => {
       set("2026-08-18", "Bench Press", 10, 50),
     ];
     expect(tipsFor(rows).some((t) => /jumped/i.test(t.title))).toBe(true);
+  });
+});
+
+describe("history series", () => {
+  const rows = [
+    set("2026-08-01", "Bench Press", 8, 60),
+    set("2026-08-01", "Bench Press", 5, 70, { sets: 2 }),
+    set("2026-08-08", "Bench Press", 8, 65),
+  ];
+
+  it("builds heaviest set and est. strength per day", () => {
+    const [s] = buildExerciseSeries(rows);
+    expect(s.points.map((p) => p.date)).toEqual(["2026-08-01", "2026-08-08"]);
+    expect(s.points[0].maxWeightKg).toBe(70);
+    expect(s.points[1].maxWeightKg).toBe(65);
+  });
+
+  it("counts sets per day for the heatmap", () => {
+    expect(setsPerDay(rows)).toEqual({ "2026-08-01": 3, "2026-08-08": 1 });
   });
 });

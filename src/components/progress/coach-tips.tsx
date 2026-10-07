@@ -1,7 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import {
+  Apple,
+  BedDouble,
+  CalendarCheck,
+  ChevronDown,
+  Dumbbell,
+  Flame,
+  Loader2,
+  Repeat,
+  Scale,
+  Sparkles,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +33,17 @@ const CATEGORY_LABEL: Record<CoachTip["category"], string> = {
   balance: "Balance",
   nutrition: "Nutrition",
   motivation: "Momentum",
+};
+
+const CATEGORY_ICON: Record<CoachTip["category"], LucideIcon> = {
+  volume: Dumbbell,
+  frequency: Repeat,
+  progression: TrendingUp,
+  recovery: BedDouble,
+  consistency: CalendarCheck,
+  balance: Scale,
+  nutrition: Apple,
+  motivation: Flame,
 };
 
 export function CoachTips({
@@ -53,9 +77,7 @@ export function CoachTips({
             Coach Violet — hypertrophy tips
           </CardTitle>
           <CardDescription>
-            {ai?.source === "ai"
-              ? "AI-generated from your recent training numbers."
-              : "Smart tips from your last 4 weeks of training. Ask Violet for a deeper AI review."}
+            {ai?.source === "ai" ? "AI review" : "From your last 4 weeks"}
           </CardDescription>
         </div>
         <Button onClick={generate} disabled={isPending} size="sm">
@@ -77,16 +99,27 @@ export function CoachTips({
         {ai?.summary && (
           <p className="rounded-lg bg-primary/5 p-3 text-sm">{ai.summary}</p>
         )}
-        <ul className="space-y-3">
-          {tips.map((t, i) => (
-            <li key={`${t.title}-${i}`} className="rounded-lg border p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{t.title}</p>
-                <Badge variant="secondary">{CATEGORY_LABEL[t.category]}</Badge>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">{t.detail}</p>
-            </li>
-          ))}
+        <ul className="space-y-2">
+          {tips.map((t, i) => {
+            const Icon = CATEGORY_ICON[t.category];
+            return (
+              <li key={`${t.title}-${i}`}>
+                <details className="group rounded-xl border bg-card open:bg-muted/30" open={i === 0}>
+                  <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm font-semibold">{t.title}</span>
+                    <Badge variant="secondary" className="hidden sm:inline-flex">
+                      {CATEGORY_LABEL[t.category]}
+                    </Badge>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <p className="px-3 pb-3 pl-[3.75rem] text-sm text-muted-foreground">{t.detail}</p>
+                </details>
+              </li>
+            );
+          })}
         </ul>
         <MedicalDisclaimer />
       </CardContent>

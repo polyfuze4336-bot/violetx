@@ -7,11 +7,16 @@ import { measurementService } from "@/lib/services/measurement";
 import { exerciseEntryService } from "@/lib/services/exercise";
 import { noteService } from "@/lib/services/note";
 import { personalRecordService } from "@/lib/services/personalRecord";
+import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { NoteDialog } from "@/components/notes/note-dialog";
 import { HistoryTimeline } from "@/components/history/history-timeline";
+import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { MonthlyBars } from "@/components/charts/monthly-bars";
+import { PrProgress } from "@/components/records/pr-progress";
 
 export default async function HistoryPage() {
   const viewer = await requireAuth();
@@ -26,6 +31,8 @@ export default async function HistoryPage() {
         personalRecordService.prEvents(),
       ])
     : [[], [], [], [], []];
+
+  const visuals = viewer.athleteId ? await trainingProgressService.history() : null;
 
   const isEmpty =
     weights.length === 0 &&
@@ -62,13 +69,58 @@ export default async function HistoryPage() {
           }
         />
       ) : (
-        <HistoryTimeline
-          weights={weights}
-          measurements={measurements}
-          sets={sets}
-          notes={notes}
-          prEvents={prEvents}
-        />
+        <>
+          {visuals && Object.keys(visuals.perDay).length > 0 && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Training activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActivityHeatmap perDay={visuals.perDay} />
+                </CardContent>
+              </Card>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Sessions &amp; PRs by month</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MonthlyBars
+                      data={visuals.months.map((m) => ({
+                        label: m.label,
+                        sessions: m.sessions,
+                        prs: m.prs,
+                      }))}
+                    />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">PR progression</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <PrProgress series={visuals.series} />
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+          <details className="group rounded-xl border bg-card">
+            <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
+              Day-by-day log
+            </summary>
+            <div className="p-4 pt-0">
+              <HistoryTimeline
+                weights={weights}
+                measurements={measurements}
+                sets={sets}
+                notes={notes}
+                prEvents={prEvents}
+              />
+            </div>
+          </details>
+        </>
       )}
     </div>
   );
