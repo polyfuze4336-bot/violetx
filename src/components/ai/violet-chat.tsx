@@ -86,8 +86,8 @@ export function VioletChat({ provider }: { provider: string }) {
     setMessages((prev) => [...prev, m]);
   }
 
-  function send() {
-    const text = input.trim();
+  function send(override?: string) {
+    const text = (override ?? input).trim();
     if (!text) return;
     setInput("");
     setRawText(text);
@@ -281,6 +281,19 @@ export function VioletChat({ provider }: { provider: string }) {
             ))}
           </div>
           <div className="border-t p-3">
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {["How am I doing?", "How is my bench progressing?", "How is my recovery?", "Am I on track with my goals?"].map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => send(q)}
+                  className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();

@@ -10,6 +10,8 @@ import { importService, type ImportSummary } from "@/lib/services/import";
 import { interpretMessage, type VioletInterpretation } from "@/ai/interpret";
 import { interpretMessageWithAi } from "@/ai/llm";
 import { detectInjection } from "@/ai/safety";
+import { violetCoachService } from "@/lib/services/violetCoach";
+import { looksLikeQuestion } from "@/lib/violet-insights";
 import { aiModelLabel, aiProviderLabel, getAiConfig } from "@/ai/client";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
 import { trackEvent } from "@/lib/telemetry";
@@ -28,6 +30,33 @@ export async function violetInterpretAction(
     // interpreter never executes instructions — it only extracts data.
     if (detectInjection(text)) {
       trackEvent("ai.injection_flagged", { source: "violet" });
+    }
+
+    // Questions ("How am I doing?") get a grounded answer instead of import parsing.
+    if (looksLikeQuestion(text)) {
+      const parsedData = interpretMessage(text, {
+        measurementTypes: [],
+        defaultMeasurementUnit: "CM",
+        knownExercises: [],
+      });
+      const hasData =
+        parsedData.weightKg !== null ||
+        parsedData.measurements.length > 0 ||
+        parsedData.sets.length > 0;
+      if (!hasData) {
+        const answer = await violetCoachService.ask(text);
+        return {
+          reply: answer.answer,
+          date: null,
+          weightKg: null,
+          weightConfidence: null,
+          measurements: [],
+          sets: [],
+          questions: [],
+          unparsedLines: [],
+          provider: answer.provider,
+        };
+      }
     }
 
     const [types, exercises, profile] = await Promise.all([
