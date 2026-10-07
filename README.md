@@ -40,6 +40,39 @@ directly.
 
 ---
 
+## VioletX V2 — personal fitness intelligence
+
+V2 connects **plan → train → log → recover → analyse → adapt**. Everything below builds on the existing app;
+no feature was removed or redesigned away, and historical data stays valid.
+
+| Area | What you get | Page |
+| --- | --- | --- |
+| **Workouts** | Start a workout, log sets with large touch targets, previous performance, explainable targets, rest timer, PR celebration, session summary. State persists in Azure SQL so a refresh never loses a workout. | `/dashboard/workout`, `/dashboard/workouts` |
+| **Programs** | PPL / Upper-Lower / Full body / custom; today's workout; create, edit, duplicate, archive; **Violet proposes programs** that you review and confirm. | `/dashboard/programs` |
+| **Exercise library** | Aliases, primary/secondary muscles, equipment, movement pattern, instructions, custom exercises, personal history. | `/dashboard/exercises` |
+| **Progress & analytics** | Weekly/monthly training, progress table, 7D–ALL analytics, muscle distribution, PR timeline, e1RM trends. | `/dashboard/progress`, `/dashboard/analytics`, `/dashboard/records` |
+| **Goals** | Weight, waist, strength, weekly workouts, consistency, custom — with honest trajectories. | `/dashboard/goals` |
+| **Recovery** | Quick daily check-in → readiness 0–100 and a non-medical explanation. | `/dashboard/recovery` |
+| **Violet 2.0** | Grounded "How am I doing?" answers; weekly review with next-week proposals. | `/dashboard/coach`, `/dashboard/review` |
+| **Nutrition** | Targets, daily progress, cautious trends (private to the athlete). | `/dashboard/nutrition` |
+| **Gym Journey** | Workouts recorded at gyms count as visits; workouts by gym, favourite gym, achievements. | `/dashboard/gym` |
+| **Coach** | Read-only dashboards and share link with goals, consistency, strength, workouts, readiness scores. | `/coach/<token>` |
+
+Deep dives: [DATA-MODEL](docs/DATA-MODEL.md) · [WORKOUT-ENGINE](docs/WORKOUT-ENGINE.md) ·
+[VIOLET-INTELLIGENCE](docs/VIOLET-INTELLIGENCE.md) · [AI-SAFETY](docs/AI-SAFETY.md) · [ROADMAP](docs/ROADMAP.md).
+
+### Implementation assessment (what V2 started from)
+* **Existing:** DB-authenticated OWNER/COACH, measurements, body weight, set logging (`ExerciseEntry`), derived PRs,
+  WhatsApp import with duplicate review, Violet interpreter, nutrition, Gym Journey, coach share link, Azure
+  App Service + SQL + Key Vault + App Insights, OIDC deploy.
+* **Reused:** the layered architecture (actions → services → repositories), Epley/PR helpers, Recharts wrappers,
+  `WorkoutSession`, `GymVisit`, `ImportBatch`/`AIAction` audit pattern, share-link token model.
+* **Missing:** live workout capture, programs, goals, recovery, analytics beyond trends, grounded AI answers.
+* **Debt addressed:** server-run date handling (now athlete-timezone aware), unreliable DB resume (query retries),
+  non-session-scoped coach data (session-free loaders for the token view).
+* **Decision:** `ExerciseEntry` *is* the workout set (extended, not duplicated) so history is preserved; sessions
+  gained a lifecycle instead of introducing a parallel table.
+
 ## Design & branding
 
 The interface is a premium, minimal, futuristic and calm SaaS design inspired by
@@ -98,6 +131,14 @@ independent of the framework and the database:
 - **Zod** validates all input at the boundary (WhatsApp parser output, forms,
   route handlers).
 - **Repositories** contain only data access; **services** hold the rules.
+- **AI proposals:** Violet analyses data → returns a structured proposal → Zod
+  validation → the athlete reviews/edits → explicit confirmation → service layer
+  (RBAC) → repository → Azure SQL. AI never writes data or runs SQL
+  ([AI-SAFETY](docs/AI-SAFETY.md)).
+- **Workout lifecycle:** program template → today → start (targets copied) →
+  active workout (sets persisted per ✓) → finish → analytics, goals, weekly
+  review and Gym Journey update from the same recorded sets
+  ([WORKOUT-ENGINE](docs/WORKOUT-ENGINE.md)).
 
 ### Project structure
 
@@ -132,12 +173,17 @@ infra/                # Bicep infrastructure as code
 
 ## Testing
 
-Unit tests (Vitest) cover the security-critical, pure logic — role resolution
-and the WhatsApp parser:
+Vitest covers pure logic and security: workout/PR/overload engines, programs and
+AI-proposal validation, goals, readiness, analytics, weekly review, Violet's
+grounding guard, WhatsApp parsing/export, coach share links, RBAC (including a
+cross-service "coach is read-only" table) and a full V2 lifecycle scenario.
 
 ```bash
-npm test          # run once
+npm run lint
+npm run typecheck
+npm test            # run once
 npm run test:watch
+npm run build
 ```
 
 ---
@@ -209,6 +255,14 @@ Key Vault via Key Vault references. **Application Insights** (backed by a Log
 Analytics workspace) captures request failures, API errors and exceptions; the
 connection string is wired into App Service automatically. Imported WhatsApp
 message contents are never sent to telemetry.
+
+**V2 deployment notes:** no new Azure resources are required. The deploy workflow
+applies the additive Prisma migrations (`0007`–`0010`) with `prisma migrate deploy`
+*before* publishing the new build, so the schema is always ahead of the code. Optional
+app setting `APP_TIMEZONE` (default `Asia/Kuala_Lumpur`) sets the athlete's "today";
+Azure OpenAI (managed identity) is optional — every Violet feature has a
+deterministic fallback. Transient database connection failures (e.g. serverless
+resume) are retried automatically.
 
 ### 1. Register the Microsoft Entra ID application
 
