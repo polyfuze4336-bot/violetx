@@ -8,9 +8,8 @@ import { derivePrEvents } from "@/lib/services/personalRecord";
 import { toNumber } from "@/lib/dto";
 import { buildAnalytics, type AnalyticsResult, type RangeKey } from "@/lib/analytics-engine";
 
-export const analyticsService = {
-  async get(range: RangeKey, now: Date = new Date()): Promise<AnalyticsResult> {
-    const { athleteId } = await requireViewerAthlete();
+/** Session-free analytics (also used by the token-authorised coach view). */
+export async function computeAnalytics(athleteId: string, range: RangeKey, now: Date = new Date()): Promise<AnalyticsResult> {
     const [entries, sessions, weights, measurements, programs] = await Promise.all([
       exerciseEntryRepository.list(athleteId),
       workoutRepository.completedSessionsForAnalytics(athleteId),
@@ -61,5 +60,11 @@ export const analyticsService = {
       range,
       now
     );
+}
+
+export const analyticsService = {
+  async get(range: RangeKey, now: Date = new Date()): Promise<AnalyticsResult> {
+    const { athleteId } = await requireViewerAthlete();
+    return computeAnalytics(athleteId, range, now);
   },
 };

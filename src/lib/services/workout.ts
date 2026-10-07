@@ -180,6 +180,26 @@ async function buildActiveView(
   };
 }
 
+/** Session-free workout list (also used by the token-authorised coach view). */
+export async function listWorkoutsFor(athleteId: string, take = 30): Promise<WorkoutListItemDTO[]> {
+  const rows = await workoutRepository.listSessions(athleteId, take);
+  return rows.map((s) => {
+    const work = workingSets(s.entries);
+    return {
+      id: s.id,
+      date: s.date.toISOString(),
+      name: s.name,
+      status: s.status,
+      durationMin: durationMin(s.startedAt, s.endedAt),
+      sets: work.length,
+      volumeKg: Math.round(work.reduce((a, e) => a + setVolume({ weightKg: toNumber(e.weightKg), reps: e.reps }), 0)),
+      exercises: Array.from(new Set(s.entries.map((e) => e.exercise.name))),
+      gym: s.gymBranch?.name ?? null,
+      sessionRpe: s.sessionRpe,
+    };
+  });
+}
+
 async function requireActiveSession(athleteId: string) {
   const session = await workoutRepository.findActive(athleteId);
   if (!session) throw new NotFoundError("No workout in progress.");
@@ -190,22 +210,7 @@ export const workoutService = {
   // --- Reads (OWNER or COACH) ---
   async listSessions(take = 30): Promise<WorkoutListItemDTO[]> {
     const { athleteId } = await requireViewerAthlete();
-    const rows = await workoutRepository.listSessions(athleteId, take);
-    return rows.map((s) => {
-      const work = workingSets(s.entries);
-      return {
-        id: s.id,
-        date: s.date.toISOString(),
-        name: s.name,
-        status: s.status,
-        durationMin: durationMin(s.startedAt, s.endedAt),
-        sets: work.length,
-        volumeKg: Math.round(work.reduce((a, e) => a + setVolume({ weightKg: toNumber(e.weightKg), reps: e.reps }), 0)),
-        exercises: Array.from(new Set(s.entries.map((e) => e.exercise.name))),
-        gym: s.gymBranch?.name ?? null,
-        sessionRpe: s.sessionRpe,
-      };
-    });
+    return listWorkoutsFor(athleteId, take);
   },
 
   // --- Owner-only live workout ---

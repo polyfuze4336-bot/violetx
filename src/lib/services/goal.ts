@@ -104,9 +104,8 @@ const DEFAULT_TITLE: Record<GoalType, string> = {
   CUSTOM: "Custom goal",
 };
 
-export const goalService = {
-  async list(includeArchived = false): Promise<GoalDTO[]> {
-    const { athleteId } = await requireViewerAthlete();
+/** Session-free goal loader (also used by the token-authorised coach view). */
+export async function loadGoals(athleteId: string, includeArchived = false): Promise<GoalDTO[]> {
     const [goals, sources, exercises] = await Promise.all([
       goalRepository.list(athleteId, includeArchived),
       loadSources(athleteId),
@@ -141,6 +140,12 @@ export const goalService = {
         progress,
       };
     });
+}
+
+export const goalService = {
+  async list(includeArchived = false): Promise<GoalDTO[]> {
+    const { athleteId } = await requireViewerAthlete();
+    return loadGoals(athleteId, includeArchived);
   },
 
   /** Goal summary for dashboards (active goals only). */

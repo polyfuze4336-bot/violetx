@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Dumbbell, Eye, Ruler, Trophy, Weight } from "lucide-react";
+import { Dumbbell, Eye, Flame, Gauge, Ruler, Target, Trophy, Weight } from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
 import { TrendChartCard } from "@/components/charts/trend-chart-card";
+import { ProgressLineChart } from "@/components/charts/line-chart";
+import { SimpleBars } from "@/components/charts/simple-bars";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,6 +124,36 @@ export default async function CoachSharePage({
           />
         </section>
 
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard label="Workouts / week" icon={Dumbbell} value={String(data.training.workoutsPerWeek)} hint={`${data.training.workouts} in 3 months`} />
+          <StatCard label="Consistency" icon={Flame} accent="success" value={data.training.consistencyPct !== null ? `${data.training.consistencyPct}%` : "—"} />
+          <StatCard label="Program adherence" icon={Gauge} accent="magenta" value={data.training.adherencePct !== null ? `${data.training.adherencePct}%` : "—"} />
+          <StatCard label="Readiness (latest)" icon={Target} value={data.readiness.length ? String(data.readiness[data.readiness.length - 1].score) : "—"} />
+        </section>
+
+        {data.goals.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Goals</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {data.goals.map((g) => (
+                <div key={g.title} className="space-y-1">
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="font-medium">{g.title}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {g.current ?? "—"} / {g.target} {g.unit.startsWith("/") ? "" : g.unit}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div className={g.achieved ? "h-full rounded-full bg-success" : "h-full rounded-full bg-brand-gradient"} style={{ width: `${g.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {data.weights.length > 0 && (
           <TrendChartCard
             title="Body weight"
@@ -148,6 +180,75 @@ export default async function CoachSharePage({
               />
             ))}
           </section>
+        )}
+
+        {data.training.e1rm.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Estimated strength</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProgressLineChart
+                data={Array.from(new Set(data.training.e1rm.flatMap((t) => t.points.map((p) => p.date)))).sort().map((d) => {
+                  const row: Record<string, string | number> = { label: formatDate(d).replace(/ \d{4}$/, "") };
+                  data.training.e1rm.forEach((t) => {
+                    const p = t.points.find((x) => x.date === d);
+                    if (p) row[t.name] = p.e1rm;
+                  });
+                  return row;
+                })}
+                xKey="label"
+                series={data.training.e1rm.map((t, i) => ({ key: t.name, name: t.name, color: (i % 5) + 1 }))}
+                unit="kg"
+                height={260}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {data.training.weeklyVolume.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Training volume</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleBars data={data.training.weeklyVolume.map((v) => ({ ...v }))} xKey="label" series={[{ key: "volumeKg", name: "Volume (kg)", color: 1 }]} height={200} />
+            </CardContent>
+          </Card>
+        )}
+
+        {data.readiness.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Readiness trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProgressLineChart data={data.readiness.map((r) => ({ label: formatDate(r.date).replace(/ \d{4}$/, ""), score: r.score }))} xKey="label" series={[{ key: "score", name: "Readiness", color: 3 }]} height={180} />
+            </CardContent>
+          </Card>
+        )}
+
+        {data.workouts.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Recent workouts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y text-sm">
+                {data.workouts.map((w, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{w.name ?? w.exercises.slice(0, 2).join(", ")}</span>
+                      <span className="block text-xs text-muted-foreground">{formatDate(w.date)}{w.durationMin !== null ? ` · ${w.durationMin} min` : ""}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {w.sets} sets · {(w.volumeKg / 1000).toFixed(1)} t
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
         )}
 
         {data.records.length > 0 && (

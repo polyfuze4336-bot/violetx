@@ -53,6 +53,23 @@ function toDTO(row: Awaited<ReturnType<typeof checkInRepository.getByDate>> & ob
   };
 }
 
+/** Readiness scores only (no notes or heart rate) — safe for the coach view. */
+export async function readinessHistory(athleteId: string, days = 30, now: Date = new Date()): Promise<{ date: string; score: number }[]> {
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const rows = await checkInRepository.list(athleteId, since);
+  return rows.map((r) => ({
+    date: r.date.toISOString(),
+    score: computeReadiness({
+      sleepHours: toNumber(r.sleepHours),
+      sleepQuality: r.sleepQuality,
+      energy: r.energy,
+      soreness: r.soreness,
+      stress: r.stress,
+      motivation: r.motivation,
+    }).score,
+  }));
+}
+
 export const checkInService = {
   async upsert(input: CheckInFormInput): Promise<CheckInDTO> {
     const { athleteId } = await requireOwnerAthlete();

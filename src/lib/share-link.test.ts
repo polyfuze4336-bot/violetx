@@ -23,6 +23,18 @@ vi.mock("@/lib/repositories/measurement", () => ({
 vi.mock("@/lib/repositories/exercise", () => ({
   exerciseEntryRepository: { list: vi.fn().mockResolvedValue([]) },
 }));
+vi.mock("@/lib/services/goal", () => ({ loadGoals: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/lib/services/workout", () => ({ listWorkoutsFor: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/lib/services/checkin", () => ({ readinessHistory: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/lib/services/analytics", () => ({
+  computeAnalytics: vi.fn().mockResolvedValue({
+    totals: { workouts: 0, workoutsPerWeek: 0 },
+    consistency: { pct: null },
+    adherence: null,
+    buckets: [],
+    e1rmTrends: [],
+  }),
+}));
 
 import { getServerSession } from "next-auth";
 
@@ -168,5 +180,7 @@ describe("shareLinkService", () => {
     const data = await shareLinkService.getSharedProgress(token);
     expect(data).not.toBeNull();
     expect(data).not.toHaveProperty("notes");
+    expect(data).not.toHaveProperty("nutrition");
+    expect(Object.keys(data!.workouts[0] ?? {})).not.toContain("gym");
   });
 });
