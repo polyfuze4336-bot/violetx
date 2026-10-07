@@ -19,11 +19,14 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Recent exceptions
+      - name: App logs
+        env:
+          WEBAPP: ${{ secrets.AZURE_WEBAPP_NAME }}
         run: |
-          az config set extension.use_dynamic_install=yes_without_prompt extension.dynamic_install_allow_preview=true >/dev/null
-          q() { az monitor app-insights query -g rg-violetx --app violetx-ai --offset 6h --analytics-query "$1" --query "tables[0].rows" -o json 2>&1 | grep -v WARNING | tr -s " \n" " " || true; echo; }
-          echo "== POST requests"; q "requests | where name startswith 'POST' | order by timestamp desc | take 25 | project timestamp, name, resultCode, duration"
-          echo "== failed dependencies"; q "dependencies | where success == false | order by timestamp desc | take 15 | project timestamp, type, name=substring(name,0,80), resultCode, duration"
-          echo "== exceptions"; q "exceptions | order by timestamp desc | take 10 | project timestamp, type, msg=substring(replace_string(outerMessage,'\n',' '),0,500)"
-          echo "== traces"; q "traces | where severityLevel >= 3 | order by timestamp desc | take 10 | project timestamp, msg=substring(replace_string(message,'\n',' '),0,500)"
+          az webapp log download -g rg-violetx -n "$WEBAPP" --log-file logs.zip >/dev/null 2>&1 || echo "download failed"
+          mkdir -p logs && unzip -oq logs.zip -d logs || true
+          find logs -type f | head -20
+          for f in $(find logs -type f -name '*docker.log' | sort -r | head -4); do
+            echo "=== $f"
+            grep -n -A 14 "Unexpected action error" "$f" | cut -c1-400 | tail -80
+          done
