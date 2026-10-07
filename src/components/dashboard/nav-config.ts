@@ -28,6 +28,10 @@ export interface NavItem {
   ownerOnly?: boolean;
   /** Shown in the mobile bottom navigation bar (most common actions). */
   bottomNav?: boolean;
+  /** Shown in the bottom bar for coaches only (replaces owner-only slots). */
+  coachBottomNav?: boolean;
+  /** Compact label for the bottom bar. */
+  shortLabel?: string;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -39,14 +43,21 @@ export const NAV_ITEMS: NavItem[] = [
     ownerOnly: true,
     bottomNav: true,
   },
-  { href: "/dashboard/workouts", label: "Workout log", icon: Dumbbell },
+  {
+    href: "/dashboard/workouts",
+    label: "Workout log",
+    shortLabel: "Workouts",
+    icon: Dumbbell,
+    coachBottomNav: true,
+  },
   { href: "/dashboard/programs", label: "Programs", icon: ClipboardList },
   { href: "/dashboard/review", label: "Weekly review", icon: CalendarCheck },
-  { href: "/dashboard/goals", label: "Goals", icon: Target },
+  { href: "/dashboard/goals", label: "Goals", icon: Target, coachBottomNav: true },
   { href: "/dashboard/recovery", label: "Recovery", icon: HeartPulse },
   {
     href: "/dashboard/coach",
     label: "AI Coach",
+    shortLabel: "Violet",
     icon: Sparkles,
     ownerOnly: true,
     bottomNav: true,
@@ -54,6 +65,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard/progress",
     label: "Training",
+    shortLabel: "Progress",
     icon: BarChart3,
     bottomNav: true,
   },

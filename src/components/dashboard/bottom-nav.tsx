@@ -16,8 +16,10 @@ export function BottomNav({
   onMore: () => void;
 }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter(
-    (item) => item.bottomNav && (!item.ownerOnly || role === "OWNER")
+  const items = NAV_ITEMS.filter((item) =>
+    role === "OWNER"
+      ? item.bottomNav
+      : (item.bottomNav && !item.ownerOnly) || item.coachBottomNav
   );
 
   return (
@@ -37,19 +39,19 @@ export function BottomNav({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
+                "flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors active:scale-95",
                 active ? "text-primary" : "text-muted-foreground"
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.label}
+              {item.shortLabel ?? item.label}
             </Link>
           );
         })}
         <button
           type="button"
           onClick={onMore}
-          className="flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-muted-foreground transition-colors"
+          className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium text-muted-foreground transition-colors active:scale-95"
         >
           <MoreHorizontal className="h-5 w-5" />
           More

@@ -18,6 +18,7 @@ import { exerciseService, exerciseEntryService } from "@/lib/services/exercise";
 import { personalRecordService } from "@/lib/services/personalRecord";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { HomeHero } from "@/components/dashboard/home-hero";
 import { Sparkline } from "@/components/charts/sparkline";
 import { computeSeriesStats, type SeriesStats } from "@/lib/analytics";
 import {
@@ -171,6 +172,8 @@ export default async function DashboardOverviewPage() {
           </>
         )}
       </div>
+
+      <HomeHero isOwner={isOwner} />
 
       {isOwner && (
         <div className="flex flex-wrap gap-2">

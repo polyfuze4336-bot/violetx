@@ -235,3 +235,30 @@ export function usesOnlyKnownNumbers(answer: string, s: InsightSnapshot): boolea
     return known.some((k) => Math.abs(k - n) <= 0.051 || Math.abs(Math.round(k) - n) < 0.5);
   });
 }
+
+const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+
+/**
+ * One-line, evidence-based observation for the dashboard: an estimated-strength
+ * series that rose for several consecutive sessions, else strong consistency.
+ */
+export function progressInsight(
+  e1rm: { name: string; points: { date: string; e1rm: number }[] }[],
+  consistencyPct: number | null
+): string | null {
+  let best: { name: string; run: number } | null = null;
+  for (const t of e1rm) {
+    let run = 0;
+    for (let i = t.points.length - 1; i > 0; i--) {
+      if (t.points[i].e1rm > t.points[i - 1].e1rm) run += 1;
+      else break;
+    }
+    if (run >= 2 && (!best || run > best.run)) best = { name: t.name, run };
+  }
+  if (best) {
+    const n = best.run;
+    return `Your ${best.name.toLowerCase()} estimated strength has progressed for ${COUNT_WORDS[n] ?? n} consecutive sessions.`;
+  }
+  if (consistencyPct !== null && consistencyPct >= 75) return "Your training consistency has been strong recently.";
+  return null;
+}

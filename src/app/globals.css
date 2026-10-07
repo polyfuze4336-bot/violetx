@@ -126,3 +126,30 @@
       hsl(var(--background));
   }
 }
+
+/* Mobile ergonomics: no tap flash, no double-tap zoom delay, and 16px form
+   controls so iOS Safari doesn't zoom the page when an input is focused. */
+@layer base {
+  button,
+  a,
+  summary,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  @media (max-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

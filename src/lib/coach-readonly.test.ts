@@ -42,7 +42,7 @@ describe("coach is strictly read-only across V2 services", () => {
 
   for (const [name, call] of mutations) {
     it(`blocks: ${name}`, async () => {
-      const err = await call().catch((e) => e);
+      const err = (await call().catch((e) => e)) as { status?: number };
       expect(err).toBeInstanceOf(AuthorizationError);
       expect(err.status).toBe(403);
     });
