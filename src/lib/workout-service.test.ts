@@ -144,7 +144,7 @@ describe("workoutService lifecycle", () => {
       row("2026-08-13", 80, 8, "old"),
     ] as never);
     repo.countSessionSets.mockResolvedValue(0);
-    repo.createSet.mockImplementation(async (d) => ({ id: "n1", ...d }) as never);
+    repo.createSet.mockImplementation(((d: object) => Promise.resolve({ id: "n1", ...d })) as never);
 
     const res = await workoutService.logSet({ workoutExerciseId: "we1", weightKg: 82.5, reps: 8 });
     expect(res.set.weightKg).toBe(82.5);

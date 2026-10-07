@@ -4,6 +4,8 @@ import { Dumbbell } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { exerciseService } from "@/lib/services/exercise";
 import { workoutService } from "@/lib/services/workout";
+import { programService } from "@/lib/services/program";
+import { TodayCard } from "@/components/programs/today-card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ActiveWorkout } from "@/components/workout/active-workout";
 import { StartWorkout } from "@/components/workout/start-workout";
@@ -19,10 +21,11 @@ export default async function WorkoutPage() {
     return <EmptyState icon={Dumbbell} title="No athlete profile yet" />;
   }
 
-  const [active, exercises, recent] = await Promise.all([
+  const [active, exercises, recent, today] = await Promise.all([
     workoutService.getActive(),
     exerciseService.list(),
     workoutService.listSessions(5),
+    programService.today(),
   ]);
   const library = exercises
     .filter((e) => e.active)
@@ -35,7 +38,8 @@ export default async function WorkoutPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader title="Workout" description="Start a workout and log sets as you go." />
-      <StartWorkout library={library} />
+      {today && <TodayCard today={today} canStart />}
+      <StartWorkout library={library} label={today ? "Start a different workout" : "Start workout"} />
       <RecentWorkouts items={recent.filter((r) => r.status === "COMPLETED")} />
     </div>
   );

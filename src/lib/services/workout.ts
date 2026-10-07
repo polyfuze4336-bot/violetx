@@ -1,5 +1,6 @@
 import { workoutRepository, type SessionWithDetails } from "@/lib/repositories/workout";
 import { exerciseRepository } from "@/lib/repositories/exercise";
+import { programRepository } from "@/lib/repositories/program";
 import { requireOwnerAthlete, requireViewerAthlete } from "@/lib/services/context";
 import { toNumber } from "@/lib/dto";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
@@ -147,7 +148,10 @@ async function buildActiveView(
         notes: we.notes,
         skipped: we.skipped,
         supersetGroup: we.supersetGroup,
-        target: null,
+        target:
+          we.targetSets && we.repMin && we.repMax
+            ? { sets: we.targetSets, repMin: we.repMin, repMax: we.repMax, restSec: we.restSec }
+            : null,
         sets: we.sets.map(toSetDTO),
         previous: lastSession
           ? {
@@ -155,7 +159,10 @@ async function buildActiveView(
               sets: lastSession.sets.map((s) => ({ weightKg: s.weightKg, reps: s.reps })),
             }
           : null,
-        suggestion: suggestProgression(prior),
+        suggestion: suggestProgression(
+          prior,
+          we.repMin && we.repMax ? { repMin: we.repMin, repMax: we.repMax } : {}
+        ),
         bests: (() => {
           const b = exerciseBests(prior);
           return { maxWeightKg: b.maxWeightKg, maxE1rm: b.maxE1rm };
@@ -219,16 +226,38 @@ export const workoutService = {
     if (data.gymBranchId && !(await workoutRepository.gymBranchExists(data.gymBranchId))) {
       throw new NotFoundError("Gym not found.");
     }
+    const template = data.templateId
+      ? await programRepository.getTemplate(athleteId, data.templateId)
+      : null;
+    if (data.templateId && !template) throw new NotFoundError("Workout template not found.");
+
     const session = await workoutRepository.createSession({
       athleteId,
       date: data.date,
-      name: data.name ?? null,
+      name: data.name ?? template?.name ?? null,
       status: "IN_PROGRESS",
       startedAt: new Date(),
       gymBranchId: data.gymBranchId ?? null,
+      programId: template?.program.id ?? null,
+      templateId: template?.id ?? null,
     });
     let order = 0;
-    for (const exerciseId of data.exerciseIds) {
+    // Targets are copied onto the workout so later program edits never
+    // change what was planned for this session.
+    for (const te of template?.exercises ?? []) {
+      await workoutRepository.createWorkoutExercise({
+        athleteId,
+        sessionId: session.id,
+        exerciseId: te.exerciseId,
+        sortOrder: order++,
+        targetSets: te.targetSets,
+        repMin: te.repMin,
+        repMax: te.repMax,
+        restSec: te.restSec,
+        notes: te.notes,
+      });
+    }
+    for (const exerciseId of template ? [] : data.exerciseIds) {
       const exercise = await exerciseRepository.getById(athleteId, exerciseId);
       if (!exercise) continue;
       await workoutRepository.createWorkoutExercise({

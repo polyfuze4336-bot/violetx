@@ -83,6 +83,8 @@ model Athlete {
   gymVisits        GymVisit[]
   nutritionEntries NutritionEntry[]
   coachShareLinks  CoachShareLink[]
+  workoutPrograms  WorkoutProgram[]
+  aiProposals      AIProposalLog[]
 }
 
 /// Body weight over time (always kilograms).
@@ -162,9 +164,10 @@ model Exercise {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  athlete          Athlete           @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  entries          ExerciseEntry[]
-  workoutExercises WorkoutExercise[]
+  athlete           Athlete                   @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  entries           ExerciseEntry[]
+  workoutExercises  WorkoutExercise[]
+  templateExercises WorkoutTemplateExercise[]
 
   @@unique([athleteId, name])
 }
@@ -182,6 +185,8 @@ model WorkoutSession {
   startedAt     DateTime?
   endedAt       DateTime?
   gymBranchId   String?
+  programId     String?
+  templateId    String?
   /// Overall session RPE (1-10) and perceived difficulty (1-5).
   sessionRpe    Int?
   difficulty    Int?
@@ -195,6 +200,8 @@ model WorkoutSession {
   entries     ExerciseEntry[]
   exercises   WorkoutExercise[]
   importBatch ImportBatch?      @relation(fields: [importBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  program     WorkoutProgram?   @relation(fields: [programId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  template    WorkoutTemplate?  @relation(fields: [templateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId, date])
   @@index([athleteId, status])
@@ -211,6 +218,12 @@ model WorkoutExercise {
   supersetGroup Int?
   notes         String?  @db.NVarChar(1024)
   skipped       Boolean  @default(false)
+  /// Targets copied from the template at start, so editing a program never
+  /// rewrites what was planned for past workouts.
+  targetSets    Int?
+  repMin        Int?
+  repMax        Int?
+  restSec       Int?
   createdAt     DateTime @default(now())
 
   session  WorkoutSession  @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -393,4 +406,84 @@ model CoachShareLink {
   athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([athleteId])
+}
+
+/// A training program (e.g. Push / Pull / Legs). Archived programs stay in the
+/// database so historical workouts keep their program link.
+model WorkoutProgram {
+  id          String   @id @default(cuid())
+  athleteId   String
+  name        String   @db.NVarChar(120)
+  /// PPL | UPPER_LOWER | FULL_BODY | CUSTOM
+  programType String   @default("CUSTOM") @db.NVarChar(16)
+  description String?  @db.NVarChar(1024)
+  isActive    Boolean  @default(false)
+  archived    Boolean  @default(false)
+  /// MANUAL | AI (proposal reviewed and confirmed by the athlete)
+  source      String   @default("MANUAL") @db.NVarChar(16)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  athlete   Athlete           @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  templates WorkoutTemplate[]
+  sessions  WorkoutSession[]
+
+  @@index([athleteId, archived])
+}
+
+/// One scheduled day of a program (e.g. "Push A").
+model WorkoutTemplate {
+  id        String   @id @default(cuid())
+  programId String
+  athleteId String
+  name      String   @db.NVarChar(120)
+  dayOrder  Int      @default(0)
+  /// Optional preferred weekday, 0 = Sunday .. 6 = Saturday.
+  weekday   Int?
+  notes     String?  @db.NVarChar(1024)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  program   WorkoutProgram            @relation(fields: [programId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exercises WorkoutTemplateExercise[]
+  sessions  WorkoutSession[]
+
+  @@index([programId, dayOrder])
+}
+
+model WorkoutTemplateExercise {
+  id         String  @id @default(cuid())
+  templateId String
+  exerciseId String
+  sortOrder  Int     @default(0)
+  targetSets Int     @default(3)
+  repMin     Int     @default(8)
+  repMax     Int     @default(12)
+  restSec    Int?
+  notes      String? @db.NVarChar(512)
+
+  template WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exercise Exercise        @relation(fields: [exerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([templateId, sortOrder])
+}
+
+/// Audit trail for AI-assisted proposals. The AI never writes fitness data; a
+/// proposal only becomes data after the athlete reviews and confirms it.
+model AIProposalLog {
+  id          String   @id @default(cuid())
+  athleteId   String
+  kind        String   @db.NVarChar(40)
+  /// PROPOSED | APPROVED | REJECTED
+  status      String   @default("APPROVED") @db.NVarChar(16)
+  provider    String?  @db.NVarChar(40)
+  model       String?  @db.NVarChar(80)
+  payload     String   @db.NVarChar(Max)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  athlete Athlete @relation(fields: [athleteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([athleteId, createdAt])
 }

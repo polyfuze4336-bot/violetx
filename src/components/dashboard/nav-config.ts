@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  ClipboardList,
   Dumbbell,
   Play,
   History,
@@ -35,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
     bottomNav: true,
   },
   { href: "/dashboard/workouts", label: "Workout log", icon: Dumbbell },
+  { href: "/dashboard/programs", label: "Programs", icon: ClipboardList },
   {
     href: "/dashboard/coach",
     label: "AI Coach",
