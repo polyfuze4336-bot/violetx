@@ -7,8 +7,11 @@ import {
 import { toNumber } from "@/lib/dto";
 import {
   createNutritionSchema,
+  nutritionTargetsSchema,
   type CreateNutritionInput,
+  type NutritionTargetsInput,
 } from "@/lib/schemas";
+import type { NutritionTargets } from "@/lib/nutrition-intel";
 
 export interface NutritionEntryDTO {
   id: string;
@@ -27,6 +30,37 @@ function num(v: unknown): number | null {
 }
 
 export const nutritionService = {
+  async getTargets(): Promise<NutritionTargets> {
+    const { athleteId } = await requireViewerAthlete();
+    const a = await prisma.athlete.findUnique({
+      where: { id: athleteId },
+      select: { calorieTarget: true, proteinTarget: true, carbTarget: true, fatTarget: true, waterTargetL: true },
+    });
+    return {
+      calories: a?.calorieTarget ?? null,
+      protein: a?.proteinTarget ?? null,
+      carbohydrates: a?.carbTarget ?? null,
+      fat: a?.fatTarget ?? null,
+      waterL: num(a?.waterTargetL),
+    };
+  },
+
+  async setTargets(input: NutritionTargetsInput): Promise<NutritionTargets> {
+    const { athleteId } = await requireOwnerAthlete();
+    const data = nutritionTargetsSchema.parse(input);
+    await prisma.athlete.update({
+      where: { id: athleteId },
+      data: {
+        calorieTarget: data.calories ?? null,
+        proteinTarget: data.protein ?? null,
+        carbTarget: data.carbohydrates ?? null,
+        fatTarget: data.fat ?? null,
+        waterTargetL: data.waterL ?? null,
+      },
+    });
+    return nutritionService.getTargets();
+  },
+
   async list(): Promise<NutritionEntryDTO[]> {
     const { athleteId } = await requireViewerAthlete();
     const rows = await prisma.nutritionEntry.findMany({

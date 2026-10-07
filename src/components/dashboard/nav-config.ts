@@ -1,4 +1,5 @@
 import {
+  CalendarCheck,
   LineChart,
   BarChart3,
   HeartPulse,
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { href: "/dashboard/workouts", label: "Workout log", icon: Dumbbell },
   { href: "/dashboard/programs", label: "Programs", icon: ClipboardList },
+  { href: "/dashboard/review", label: "Weekly review", icon: CalendarCheck },
   { href: "/dashboard/goals", label: "Goals", icon: Target },
   { href: "/dashboard/recovery", label: "Recovery", icon: HeartPulse },
   {

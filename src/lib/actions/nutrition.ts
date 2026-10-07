@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { nutritionService } from "@/lib/services/nutrition";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
-import type { CreateNutritionInput } from "@/lib/schemas";
+import type { CreateNutritionInput, NutritionTargetsInput } from "@/lib/schemas";
+import type { NutritionTargets } from "@/lib/nutrition-intel";
 
 export async function createNutritionAction(
   input: CreateNutritionInput
@@ -18,6 +19,14 @@ export async function deleteNutritionAction(
   id: string
 ): Promise<ActionResult> {
   const result = await runAction(() => nutritionService.delete(id));
+  if (result.ok) revalidatePath("/dashboard/nutrition");
+  return result;
+}
+
+export async function saveNutritionTargetsAction(
+  input: NutritionTargetsInput
+): Promise<ActionResult<NutritionTargets>> {
+  const result = await runAction(() => nutritionService.setTargets(input));
   if (result.ok) revalidatePath("/dashboard/nutrition");
   return result;
 }

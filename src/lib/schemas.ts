@@ -294,3 +294,20 @@ export const createShareLinkSchema = z.object({
   expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
 });
 export type CreateShareLinkInput = z.input<typeof createShareLinkSchema>;
+
+// Nutrition targets -----------------------------------------------------------
+
+const optionalTarget = (max: number) =>
+  z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.coerce.number().positive().max(max).optional()
+  );
+
+export const nutritionTargetsSchema = z.object({
+  calories: optionalTarget(20000).transform((v) => (v === undefined ? undefined : Math.round(v))),
+  protein: optionalTarget(1000).transform((v) => (v === undefined ? undefined : Math.round(v))),
+  carbohydrates: optionalTarget(2000).transform((v) => (v === undefined ? undefined : Math.round(v))),
+  fat: optionalTarget(1000).transform((v) => (v === undefined ? undefined : Math.round(v))),
+  waterL: optionalTarget(20),
+});
+export type NutritionTargetsInput = z.input<typeof nutritionTargetsSchema>;

@@ -68,6 +68,12 @@ model Athlete {
   defaultWeightUnit      String    @default("KG") @db.NVarChar(8)
   defaultMeasurementUnit String    @default("CM") @db.NVarChar(8)
   trustedAiImports       Boolean   @default(false)
+  /// Optional nutrition targets (all nullable; nutrition stays optional).
+  calorieTarget          Int?
+  proteinTarget          Int?
+  carbTarget             Int?
+  fatTarget              Int?
+  waterTargetL           Decimal?  @db.Decimal(4, 1)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
