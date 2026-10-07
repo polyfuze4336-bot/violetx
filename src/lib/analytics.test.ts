@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeSeriesStats,
   detectPrEvents,
+  prEventDetail,
   filterPointsByRange,
   type PrInputSet,
 } from "@/lib/analytics";
@@ -119,5 +120,65 @@ describe("detectPrEvents", () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("REPS");
     expect(events[0]).toMatchObject({ weightKg: 50, reps: 12, prevReps: 9 });
+  });
+});
+
+describe("detectPrEvents: rep progression is progress (rep PR at the same load)", () => {
+  const b = { exerciseId: "bench", exerciseName: "Bench Press", position: 0 };
+  const set = (date: string, weightKg: number, reps: number, position = 0) => ({ ...b, date, weightKg, reps, position });
+
+  it("case 1: 80x8 -> 80x10 is a REP PR (+2 reps)", () => {
+    const ev = detectPrEvents([set("2026-08-01", 80, 8), set("2026-08-08", 80, 10)]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ type: "REPS", weightKg: 80, reps: 10, prevReps: 8 });
+    expect(prEventDetail(ev[0])).toEqual({ label: "Rep PR", detail: "+2 reps at 80 kg" });
+  });
+
+  it("case 2: 80x10 -> 80x8 is not a rep PR", () => {
+    expect(detectPrEvents([set("2026-08-01", 80, 10), set("2026-08-08", 80, 8)])).toEqual([]);
+  });
+
+  it("case 3: 80x8 -> 82.5x8 is a weight PR only", () => {
+    const ev = detectPrEvents([set("2026-08-01", 80, 8), set("2026-08-08", 82.5, 8)]);
+    expect(ev.map((e) => e.type)).toEqual(["WEIGHT"]);
+    expect(prEventDetail(ev[0]).detail).toBe("+2.5 kg");
+  });
+
+  it("case 4: 80x8 -> 82.5x10 is a weight PR and no (cross-load) rep PR", () => {
+    const ev = detectPrEvents([set("2026-08-01", 80, 8), set("2026-08-08", 82.5, 10)]);
+    expect(ev.map((e) => e.type)).toEqual(["WEIGHT"]);
+  });
+
+  it("case 5: 100x10 history, then 60x15 -> no PR at all (rep records are contextual to load)", () => {
+    expect(detectPrEvents([set("2026-08-01", 100, 10), set("2026-08-08", 60, 15)])).toEqual([]);
+  });
+
+  it("case 5b: but beating your own best at 60 kg later is a rep PR at 60 kg only", () => {
+    const ev = detectPrEvents([set("2026-08-01", 100, 10), set("2026-08-08", 60, 15), set("2026-08-15", 60, 18)]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ type: "REPS", weightKg: 60, reps: 18, prevReps: 15 });
+  });
+
+  it("case 6: 3x(80x8) then 80x10, 80x9, 80x8 yields one rep PR, not several", () => {
+    const ev = detectPrEvents([
+      set("2026-08-01", 80, 8, 0), set("2026-08-01", 80, 8, 1), set("2026-08-01", 80, 8, 2),
+      set("2026-08-08", 80, 10, 0), set("2026-08-08", 80, 9, 1), set("2026-08-08", 80, 8, 2),
+    ]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ type: "REPS", reps: 10, prevReps: 8 });
+  });
+
+  it("case 6b: ascending sets in one session (8, 9, 10) collapse into the best one", () => {
+    const ev = detectPrEvents([
+      set("2026-08-01", 80, 8),
+      set("2026-08-08", 80, 8, 0), set("2026-08-08", 80, 9, 1), set("2026-08-08", 80, 10, 2),
+    ]);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ reps: 10, prevReps: 8 });
+  });
+
+  it("tolerates decimal representation of the same load (82.5 vs 82.50)", () => {
+    const ev = detectPrEvents([set("2026-08-01", 82.5, 6), set("2026-08-08", 82.50, 8)]);
+    expect(ev[0]).toMatchObject({ type: "REPS", prevReps: 6 });
   });
 });

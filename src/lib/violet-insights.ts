@@ -6,6 +6,50 @@ export interface Reading {
   value: number;
 }
 
+import { describeProgression } from "@/lib/workout-engine";
+
+/** Deterministic load / rep progression between an exercise's last two sessions. */
+export interface Progression {
+  lift: string;
+  kind: "LOAD" | "REPS";
+  /** Load of the comparison (the new top load for LOAD, the shared load for REPS). */
+  weightKg: number;
+  from: number;
+  to: number;
+  delta: number;
+}
+
+/**
+ * Last session vs the one before, per exercise, when the latest session falls
+ * in the window. Computed here so the AI never has to derive history itself.
+ */
+export function recentProgressions(
+  sets: { date: string; exerciseName: string; weightKg: number; reps: number; setType?: string | null }[],
+  now: Date,
+  windowDays: number
+): Progression[] {
+  const cutoff = now.getTime() - windowDays * 86_400_000;
+  const byExercise = new Map<string, Map<string, { weightKg: number; reps: number }[]>>();
+  for (const s of sets) {
+    if (s.setType === "WARMUP") continue;
+    const days = byExercise.get(s.exerciseName) ?? new Map();
+    const d = s.date.slice(0, 10);
+    days.set(d, [...(days.get(d) ?? []), { weightKg: s.weightKg, reps: s.reps }]);
+    byExercise.set(s.exerciseName, days);
+  }
+  const out: Progression[] = [];
+  for (const [lift, days] of Array.from(byExercise.entries())) {
+    const keys = Array.from(days.keys()).sort();
+    if (keys.length < 2) continue;
+    const [prev, last] = keys.slice(-2);
+    if (new Date(`${last}T00:00:00Z`).getTime() < cutoff) continue;
+    const p = describeProgression(days.get(prev)!, days.get(last)!);
+    if (p.reps) out.push({ lift, kind: "REPS", weightKg: p.reps.weightKg, from: p.reps.from, to: p.reps.to, delta: p.reps.delta });
+    if (p.load) out.push({ lift, kind: "LOAD", weightKg: p.load.toKg, from: p.load.fromKg, to: p.load.toKg, delta: p.load.deltaKg });
+  }
+  return out;
+}
+
 export interface InsightInput {
   now: Date;
   windowDays: number;
@@ -19,6 +63,7 @@ export interface InsightInput {
   adherencePct: number | null;
   avgSessionRpe: number | null;
   e1rm: { name: string; changePct: number | null }[];
+  progressions?: Progression[];
   nutrition: { date: string; calories: number | null; protein: number | null; water: number | null }[];
   goals: { title: string; pct: number; achieved: boolean; targetIsLowerThanStart: boolean; type: string }[];
   readinessAvg7d: number | null;
@@ -38,6 +83,8 @@ export interface InsightSnapshot {
   waist: SeriesFact | null;
   workouts: { count: number; perWeek: number; consistencyPct: number | null; adherencePct: number | null; avgSessionRpe: number | null };
   strength: { lift: string; changePct: number }[];
+  /** Load and rep progressions between the last two sessions (both count as progress). */
+  progressions: Progression[];
   prCount: number;
   nutrition: { daysLogged: number; avgCalories: number | null; avgProtein: number | null; avgWaterL: number | null } | null;
   goals: { title: string; pct: number; achieved: boolean; type: string }[];
@@ -85,7 +132,7 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
   if (!weight) missing.push("body weight (needs at least two weigh-ins)");
   if (!waist) missing.push("waist measurements (needs at least two)");
   if (i.workouts === 0) missing.push("workouts");
-  if (strength.length === 0) missing.push("strength trends (needs repeated sessions of an exercise)");
+  if (strength.length === 0 && (i.progressions ?? []).length === 0) missing.push("strength trends (needs repeated sessions of an exercise)");
   if (!nutrition) missing.push("nutrition logs");
   if (i.readinessAvg7d === null) missing.push("recovery check-ins");
   if (i.goals.length === 0) missing.push("goals");
@@ -102,6 +149,7 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
       avgSessionRpe: i.avgSessionRpe,
     },
     strength,
+    progressions: i.progressions ?? [],
     prCount: i.prCount,
     nutrition,
     goals: i.goals.map((g) => ({ title: g.title, pct: g.pct, achieved: g.achieved, type: g.type })),
@@ -114,6 +162,20 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
 
 const signed = (n: number, unit = "") =>
   `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}${unit === "%" ? "%" : unit ? ` ${unit}` : ""}`;
+
+/** "Bench Press: 8 → 10 reps at 80 kg" / "Bench Press: 77.5 → 80 kg (+2.5 kg)". */
+export function progressionText(p: Progression): string {
+  return p.kind === "REPS"
+    ? `${p.lift}: ${p.from} → ${p.to} reps at ${p.weightKg} kg`
+    : `${p.lift}: ${p.from} → ${p.to} kg (+${p.delta} kg)`;
+}
+
+/** Sentence form used when answering strength questions. */
+export function progressionSentence(p: Progression): string {
+  return p.kind === "REPS"
+    ? `Your ${p.lift.toLowerCase()} improved from ${p.from} to ${p.to} reps at ${p.weightKg} kg.`
+    : `Your ${p.lift.toLowerCase()} load went from ${p.from} to ${p.to} kg (+${p.delta} kg).`;
+}
 
 export interface Summary {
   headline: string;
@@ -130,6 +192,7 @@ export function composeSummary(s: InsightSnapshot): Summary {
     bullets.push(`Workouts: ${s.workouts.count} (${s.workouts.perWeek}/week)`);
     if (s.workouts.adherencePct !== null) bullets.push(`Program adherence: ${s.workouts.adherencePct}%`);
   }
+  for (const p of s.progressions.slice(0, 3)) bullets.push(progressionText(p));
   for (const st of s.strength.slice(0, 3)) bullets.push(`${st.lift} estimated 1RM: ${signed(st.changePct, "%")}`);
   if (s.prCount > 0) bullets.push(`New PRs: ${s.prCount}`);
   if (s.nutrition?.avgProtein != null) bullets.push(`Average protein logged: ${s.nutrition.avgProtein} g/day (${s.nutrition.daysLogged} days logged)`);
@@ -137,7 +200,8 @@ export function composeSummary(s: InsightSnapshot): Summary {
 
   let conclusion: string | null = null;
   const strengthHeld = s.strength.length > 0 && s.strength.every((x) => x.changePct >= -2);
-  const strengthUp = s.strength.some((x) => x.changePct > 0);
+  // More reps at the same load is progress, even when the weight did not move.
+  const strengthUp = s.strength.some((x) => x.changePct > 0) || s.progressions.length > 0;
   if (s.weight && s.weight.change < 0 && strengthHeld) {
     conclusion = `You're losing weight while ${strengthUp ? "maintaining or improving" : "maintaining"} recorded strength, which is a positive trend${s.weightLossGoal ? " relative to your stated goal" : ""}.`;
   } else if (s.weight && s.weight.change < 0 && s.strength.length > 0 && !strengthHeld) {
@@ -190,9 +254,12 @@ export function answerFromSnapshot(intent: Intent, s: InsightSnapshot): string {
   const pick = (re: RegExp) => full.bullets.filter((b) => re.test(b));
   switch (intent) {
     case "strength": {
+      const sentences = s.progressions.map(progressionSentence);
       const lines = s.strength.map((x) => `• ${x.lift} estimated 1RM: ${signed(x.changePct, "%")}`);
       if (s.prCount > 0) lines.push(`• New PRs: ${s.prCount}`);
-      return lines.length ? `Strength over the last ${s.windowDays} days:\n${lines.join("\n")}` : "There isn't enough repeated lifting data in this period to show a strength trend yet.";
+      return lines.length || sentences.length
+        ? [...sentences, ...(lines.length ? [`Strength over the last ${s.windowDays} days:`, ...lines] : [])].join("\n")
+        : "There isn't enough repeated lifting data in this period to show a strength trend yet.";
     }
     case "body": {
       const lines = pick(/^(Weight|Waist)/);

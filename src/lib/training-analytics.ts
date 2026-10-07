@@ -323,11 +323,13 @@ export interface MatrixCell {
   reps: number;
   /** All-time peak within the visible window (lowest load for assisted lifts). */
   isPr: boolean;
-  /** Better than the previous filled cell in this row. */
+  /** Better than the previous filled cell: heavier, or more reps at the same load. */
   improved: boolean | null;
+  /** Extra reps at the same load vs the previous filled cell (rep progression). */
+  repDelta: number | null;
 }
 
-export type MatrixTrendKind = "up" | "down" | "flat" | "baseline";
+export type MatrixTrendKind = "up" | "down" | "flat" | "baseline" | "reps";
 
 export interface MatrixRow {
   exerciseId: string;
@@ -335,7 +337,7 @@ export interface MatrixRow {
   muscleGroup: MuscleGroup;
   assisted: boolean;
   cells: (MatrixCell | null)[];
-  trend: { kind: MatrixTrendKind; deltaKg: number; pct: number | null };
+  trend: { kind: MatrixTrendKind; deltaKg: number; pct: number | null; repDelta?: number; atKg?: number };
 }
 
 export interface ProgressMatrix {
@@ -394,26 +396,26 @@ export function buildProgressMatrix(
       if (assisted ? b.weightKg < p.weightKg : b.weightKg > p.weightKg) peakIdx = i;
     }
 
-    let prev: { weightKg: number } | null = null;
+    let prev: { weightKg: number; reps: number } | null = null;
     const cells = e.best.map((b, i) => {
       if (!b) return null;
-      const improved: boolean | null = prev
-        ? assisted
-          ? b.weightKg < prev.weightKg
-            ? true
-            : b.weightKg > prev.weightKg
-              ? false
-              : null
-          : b.weightKg > prev.weightKg
-            ? true
-            : b.weightKg < prev.weightKg
-              ? false
-              : null
-        : null;
+      let improved: boolean | null = null;
+      let repDelta: number | null = null;
+      if (prev) {
+        const heavier = assisted ? b.weightKg < prev.weightKg : b.weightKg > prev.weightKg;
+        const lighter = assisted ? b.weightKg > prev.weightKg : b.weightKg < prev.weightKg;
+        if (heavier) improved = true;
+        else if (lighter) improved = false;
+        else if (b.reps > prev.reps) {
+          // Same load, more reps: real progress even though the weight is unchanged.
+          improved = true;
+          repDelta = b.reps - prev.reps;
+        } else if (b.reps < prev.reps) improved = false;
+      }
       prev = b;
       const isPr = i === peakIdx;
       if (isPr) columnPrs[i] += 1;
-      return { weightKg: b.weightKg, reps: b.reps, isPr, improved };
+      return { weightKg: b.weightKg, reps: b.reps, isPr, improved, repDelta };
     });
 
     const first = e.best[filled[0]]!;
@@ -428,6 +430,10 @@ export function buildProgressMatrix(
         deltaKg: round1(raw),
         pct: first.weightKg > 0 ? Math.round((raw / first.weightKg) * 100) : null,
       };
+      // Same top load but more reps is progression too, not "holding steady".
+      if (raw === 0 && last.reps > first.reps) {
+        trend = { kind: "reps", deltaKg: 0, pct: null, repDelta: last.reps - first.reps, atKg: last.weightKg };
+      }
     }
     out.push({ exerciseId, name: e.name, muscleGroup: e.muscle, assisted, cells, trend });
   }

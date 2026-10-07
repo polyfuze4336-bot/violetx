@@ -20,7 +20,7 @@ export interface ReviewSet extends TrainingSet {
 export interface ReviewInput {
   weekStart: string;
   sets: ReviewSet[];
-  prs: { date: string; exerciseName: string; type: "WEIGHT" | "REPS"; weightKg: number; reps: number; prevWeightKg: number | null }[];
+  prs: { date: string; exerciseName: string; type: "WEIGHT" | "REPS"; weightKg: number; reps: number; prevWeightKg: number | null; prevReps?: number | null }[];
   weights: { date: string; value: number }[];
   waistCm: { date: string; value: number }[];
   checkIns: { date: string; score: number }[];
@@ -81,7 +81,9 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
         ? p.prevWeightKg !== null
           ? `+${round1(p.weightKg - p.prevWeightKg)} kg (${p.weightKg} kg × ${p.reps})`
           : `${p.weightKg} kg × ${p.reps}`
-        : `${p.reps} reps at ${p.weightKg} kg`,
+        : p.prevReps != null
+          ? `+${p.reps - p.prevReps} rep${p.reps - p.prevReps === 1 ? "" : "s"} at ${p.weightKg} kg (${p.prevReps} → ${p.reps})`
+          : `${p.reps} reps at ${p.weightKg} kg`,
   }));
 
   // Body: compare the last reading in the week with the last one before it.

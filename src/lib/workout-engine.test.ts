@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeProgression,
   detectSetPrs,
+  prDetail,
   exerciseBests,
   summarizeSessions,
   suggestProgression,
@@ -125,5 +127,103 @@ describe("suggestProgression", () => {
   it("ignores warm-up sets when judging performance", () => {
     const history = [s("2026-08-08", 100, 3, { setType: "WARMUP" }), s("2026-08-08", 60, 10), s("2026-08-08", 60, 10)];
     expect(suggestProgression(history).kind).toBe("increase_weight");
+  });
+});
+
+describe("rep progression (live set PRs)", () => {
+  const hist = (...sets: [number, number][]): LoggedSet[] => sets.map(([weightKg, reps]) => ({ date: "2026-08-01", weightKg, reps, sessionId: "old" }));
+  const types = (r: ReturnType<typeof detectSetPrs>) => r.map((p) => p.type);
+
+  it("case 1: 80x8 -> 80x10 is a REP PR with +2 reps context", () => {
+    const prs = detectSetPrs({ set: { weightKg: 80, reps: 10 }, priorHistory: hist([80, 8]), sessionSetsSoFar: [] });
+    expect(types(prs)).toContain("REPS");
+    const rep = prs.find((p) => p.type === "REPS")!;
+    expect(rep).toMatchObject({ value: 10, previous: 8, weightKg: 80 });
+    expect(prDetail(rep)).toBe("+2 reps at 80 kg (previous best 8)");
+    expect(types(prs)).not.toContain("WEIGHT");
+  });
+
+  it("case 2: 80x10 -> 80x8 is not a rep PR", () => {
+    expect(types(detectSetPrs({ set: { weightKg: 80, reps: 8 }, priorHistory: hist([80, 10]), sessionSetsSoFar: [] }))).not.toContain("REPS");
+  });
+
+  it("case 3: 80x8 -> 82.5x8 stays a weight PR (existing behaviour intact)", () => {
+    const prs = detectSetPrs({ set: { weightKg: 82.5, reps: 8 }, priorHistory: hist([80, 8]), sessionSetsSoFar: [] });
+    expect(types(prs)).toContain("WEIGHT");
+    expect(types(prs)).not.toContain("REPS");
+    expect(prDetail(prs.find((p) => p.type === "WEIGHT")!)).toBe("+2.5 kg (previous best 80 kg)");
+  });
+
+  it("case 4: 80x8 -> 82.5x10 is a weight PR with no cross-load rep PR", () => {
+    const prs = detectSetPrs({ set: { weightKg: 82.5, reps: 10 }, priorHistory: hist([80, 8]), sessionSetsSoFar: [] });
+    expect(types(prs)).toContain("WEIGHT");
+    expect(types(prs)).not.toContain("REPS");
+  });
+
+  it("case 5: 100x10 history, then 60x15 is NOT reported as a rep PR", () => {
+    const prs = detectSetPrs({ set: { weightKg: 60, reps: 15 }, priorHistory: hist([100, 10]), sessionSetsSoFar: [] });
+    expect(types(prs)).not.toContain("REPS");
+    expect(prs).toEqual([]);
+  });
+
+  it("case 5b: a PR at 60 kg compares only with 60 kg history", () => {
+    const prs = detectSetPrs({ set: { weightKg: 60, reps: 18 }, priorHistory: hist([100, 10], [60, 15]), sessionSetsSoFar: [] });
+    expect(prs.find((p) => p.type === "REPS")).toMatchObject({ previous: 15, value: 18, weightKg: 60 });
+  });
+
+  it("case 6: 80x10, 80x9, 80x8 after 3x80x8 celebrates the rep PR once", () => {
+    const prior = hist([80, 8], [80, 8], [80, 8]);
+    const soFar: { weightKg: number; reps: number }[] = [];
+    const repPrs: number[] = [];
+    for (const reps of [10, 9, 8]) {
+      const prs = detectSetPrs({ set: { weightKg: 80, reps }, priorHistory: prior, sessionSetsSoFar: soFar });
+      if (types(prs).includes("REPS")) repPrs.push(reps);
+      soFar.push({ weightKg: 80, reps });
+    }
+    expect(repPrs).toEqual([10]);
+  });
+
+  it("tolerates equal loads written differently (82.5 vs 82.50)", () => {
+    const prs = detectSetPrs({ set: { weightKg: 82.5, reps: 8 }, priorHistory: hist([82.50, 6]), sessionSetsSoFar: [] });
+    expect(types(prs)).toContain("REPS");
+  });
+
+  it("a load never done before is not a rep PR even if lighter", () => {
+    expect(types(detectSetPrs({ set: { weightKg: 70, reps: 20 }, priorHistory: hist([80, 8]), sessionSetsSoFar: [] }))).not.toContain("REPS");
+  });
+});
+
+describe("describeProgression (load vs rep progression)", () => {
+  const w = (weightKg: number, reps: number) => ({ weightKg, reps });
+
+  it("recognises more reps at the same weight as progress", () => {
+    const p = describeProgression([w(80, 8), w(80, 8)], [w(80, 10), w(80, 9)]);
+    expect(p.reps).toEqual({ weightKg: 80, from: 8, to: 10, delta: 2 });
+    expect(p.load).toBeNull();
+  });
+
+  it("recognises a heavier top set as load progression", () => {
+    const p = describeProgression([w(77.5, 8)], [w(80, 8)]);
+    expect(p.load).toEqual({ fromKg: 77.5, toKg: 80, deltaKg: 2.5 });
+    expect(p.reps).toBeNull();
+  });
+
+  it("reports both when both happened, without duplicating", () => {
+    const p = describeProgression([w(77.5, 8), w(80, 6)], [w(82.5, 6), w(80, 8)]);
+    expect(p.load?.deltaKg).toBe(2.5);
+    expect(p.reps).toEqual({ weightKg: 80, from: 6, to: 8, delta: 2 });
+  });
+
+  it("does not compare reps across different loads", () => {
+    expect(describeProgression([w(100, 10)], [w(60, 15)])).toEqual({ load: null, reps: null });
+    const p = describeProgression([w(80, 8)], [w(82.5, 10)]);
+    expect(p.load?.deltaKg).toBe(2.5);
+    expect(p.reps).toBeNull();
+  });
+
+  it("shows no progress for equal or worse sessions", () => {
+    expect(describeProgression([w(80, 8)], [w(80, 8)])).toEqual({ load: null, reps: null });
+    expect(describeProgression([w(80, 10)], [w(80, 8)])).toEqual({ load: null, reps: null });
+    expect(describeProgression([], [w(80, 8)])).toEqual({ load: null, reps: null });
   });
 });

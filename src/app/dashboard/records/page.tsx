@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { personalRecordService } from "@/lib/services/personalRecord";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { formatShortDate, formatNumber } from "@/lib/format";
+import { prEventDetail } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -92,6 +93,9 @@ export default async function RecordsPage() {
               <p className="text-lg font-bold tabular-nums">
                 {formatNumber(e.weightKg)}
                 <span className="text-xs font-medium text-muted-foreground"> kg × {e.reps}</span>
+              </p>
+              <p className="text-[11px] font-semibold text-primary">
+                {prEventDetail(e).label} · {prEventDetail(e).detail}
               </p>
               <p className="text-[11px] text-muted-foreground">{formatShortDate(e.date)}</p>
             </div>

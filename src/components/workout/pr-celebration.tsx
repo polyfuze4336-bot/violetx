@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trophy, X } from "lucide-react";
 
-import type { PrAchievement } from "@/lib/workout-engine";
+import { prDetail, type PrAchievement } from "@/lib/workout-engine";
 
 export interface PrCelebrationData {
   exerciseName: string;
@@ -28,9 +28,8 @@ export function PrCelebration({
     return () => clearTimeout(t);
   }, [data, onClose]);
 
-  const best = data
-    ? data.achievements.find((a) => a.type === "E1RM") ?? data.achievements[0]
-    : null;
+  // Only an estimated-1RM achievement carries the "vs previous best" percentage.
+  const best = data ? data.achievements.find((a) => a.type === "E1RM") ?? null : null;
 
   return (
     <AnimatePresence>
@@ -83,13 +82,16 @@ export function PrCelebration({
                 <span className="ml-2 font-semibold text-success">+{best.deltaPct}% vs previous best</span>
               )}
             </p>
-            <div className="relative mt-3 flex flex-wrap gap-1.5">
+            <ul className="relative mt-3 space-y-1.5">
               {data.achievements.map((a) => (
-                <span key={a.type} className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-                  {a.label}
-                </span>
+                <li key={a.type} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                    {a.type === "REPS" ? "Rep PR" : a.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{prDetail(a)}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </motion.div>
       )}

@@ -11,6 +11,7 @@ import { programService } from "@/lib/services/program";
 import { weeklyReviewService } from "@/lib/services/weeklyReview";
 import { todayIso } from "@/lib/dates";
 import { progressInsight } from "@/lib/violet-insights";
+import { prEventDetail } from "@/lib/analytics";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -180,6 +181,9 @@ export async function HomeHero({ isOwner }: { isOwner: boolean }) {
               <p className="font-semibold">{pr.exerciseName}</p>
               <p className="text-2xl font-bold tabular-nums">
                 {formatNumber(pr.weightKg)} kg × {pr.reps}
+              </p>
+              <p className="text-xs font-semibold text-primary">
+                {prEventDetail(pr).label} · {prEventDetail(pr).detail}
               </p>
             </>
           ) : (

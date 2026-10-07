@@ -62,6 +62,7 @@ export const weeklyReviewService = {
         weightKg: p.weightKg,
         reps: p.reps,
         prevWeightKg: p.prevWeightKg,
+        prevReps: p.prevReps,
       })),
       weights: weights.map((w) => ({ date: w.date.toISOString(), value: toNumber(w.weightKg) })),
       waistCm: measurements

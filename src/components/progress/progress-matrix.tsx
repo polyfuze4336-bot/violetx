@@ -41,7 +41,11 @@ function Cell({ cell, assisted }: { cell: MatrixCell | null; assisted: boolean }
         {cell.reps}
       </span>
       {assisted && <span className="text-[11px] font-normal italic text-muted-foreground">assist</span>}
-      {cell.improved === true && <span className="text-[11px] text-success">▲</span>}
+      {cell.improved === true && (
+        <span className="text-[11px] text-success">
+          ▲{cell.repDelta ? ` +${cell.repDelta} rep${cell.repDelta === 1 ? "" : "s"}` : ""}
+        </span>
+      )}
       {cell.improved === false && <span className="text-[11px] text-magenta">▼</span>}
     </span>
   );
@@ -53,6 +57,14 @@ function Trend({ row }: { row: MatrixRow }) {
     return (
       <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
         Baseline logged
+      </span>
+    );
+  }
+  if (kind === "reps") {
+    return (
+      <span className="inline-flex flex-col rounded-xl bg-gradient-to-br from-success/25 to-success/5 px-3 py-1.5 text-sm font-bold leading-tight tabular-nums text-success">
+        <span>▲ +{row.trend.repDelta} rep{row.trend.repDelta === 1 ? "" : "s"}</span>
+        <span className="text-xs font-semibold opacity-80">at {formatNumber(row.trend.atKg ?? 0, 2)} kg</span>
       </span>
     );
   }

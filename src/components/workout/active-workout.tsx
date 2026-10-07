@@ -14,6 +14,7 @@ import {
   Repeat,
   SkipForward,
   Trash2,
+  TrendingUp,
   Trophy,
 } from "lucide-react";
 
@@ -42,6 +43,7 @@ import {
 } from "@/lib/actions/workout";
 import { formatDate } from "@/lib/format";
 import { epley } from "@/lib/training-analytics";
+import { describeProgression, prDetail, workingSets } from "@/lib/workout-engine";
 import { ExercisePicker, type PickerExercise } from "@/components/workout/exercise-picker";
 import { GymPicker } from "@/components/workout/gym-picker";
 import type { GymOptionDTO } from "@/lib/services/gym";
@@ -224,6 +226,10 @@ function ExerciseCard({
       ? `${ex.suggestion.weightKg} kg × ${ex.suggestion.repMin}–${ex.suggestion.repMax}`
       : `Baseline · ${ex.suggestion.repMin}–${ex.suggestion.repMax} reps`;
   const workCount = ex.sets.filter((s) => s.setType !== "WARMUP").length;
+  const progress = describeProgression(
+    ex.previous?.sets ?? [],
+    workingSets(ex.sets)
+  );
 
   return (
     <Card className={cn("overflow-hidden", ex.skipped && "opacity-60")}>
@@ -284,6 +290,19 @@ function ExerciseCard({
                     )}
                   </div>
                 </div>
+              )}
+
+              {progress.load && (
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+                  <TrendingUp className="h-4 w-4" /> Load: {progress.load.fromKg} → {progress.load.toKg} kg
+                  <span className="font-medium">↑ {progress.load.deltaKg} kg</span>
+                </p>
+              )}
+              {progress.reps && (
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+                  <TrendingUp className="h-4 w-4" /> {progress.reps.weightKg} kg × {progress.reps.to}
+                  <span className="font-medium">↑ {progress.reps.delta} rep{progress.reps.delta === 1 ? "" : "s"} at {progress.reps.weightKg} kg</span>
+                </p>
               )}
 
               {ex.sets.length > 0 && (
@@ -511,7 +530,13 @@ export function ActiveWorkout({
                   <Trophy className="mt-0.5 h-4 w-4 text-primary" />
                   <div>
                     <p className="text-sm font-semibold">{p.exerciseName}</p>
-                    <p className="text-xs text-muted-foreground">{p.achievements.map((a) => a.label).join(" · ")}</p>
+                    <ul className="text-xs text-muted-foreground">
+                      {p.achievements.map((a) => (
+                        <li key={a.type}>
+                          <span className="font-medium text-foreground">{a.label}</span> · {prDetail(a)}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               ))}

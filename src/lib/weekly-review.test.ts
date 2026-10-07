@@ -123,3 +123,15 @@ describe("nutrition intelligence", () => {
     expect(out[0]).toMatch(/not proof of cause/);
   });
 });
+
+describe("weekly review: rep PR label", () => {
+  it("describes a rep PR as +reps at the same load", () => {
+    const r = buildWeeklyReview({
+      weekStart: "2026-08-17",
+      sets: [],
+      prs: [{ date: "2026-08-18", exerciseName: "Bench Press", type: "REPS", weightKg: 80, reps: 10, prevWeightKg: 80, prevReps: 8 }],
+      weights: [], waistCm: [], checkIns: [], nutrition: [], targets: null, plannedPerWeek: null,
+    });
+    expect(r.strength.prs[0].label).toBe("+2 reps at 80 kg (8 → 10)");
+  });
+});

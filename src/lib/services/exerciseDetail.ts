@@ -4,6 +4,7 @@ import {
 } from "@/lib/repositories/exercise";
 import { requireViewerAthlete } from "@/lib/services/context";
 import { toExerciseDTO, toNumber, type ExerciseDTO } from "@/lib/dto";
+import { describeProgression, type ProgressionSummary } from "@/lib/workout-engine";
 
 /** Epley estimated one-rep max: weight * (1 + reps / 30). Analytical only. */
 export function estimatedStrength(weightKg: number, reps: number): number {
@@ -33,8 +34,15 @@ export interface ExerciseSetRow {
   source: string;
 }
 
+export interface LatestProgression extends ProgressionSummary {
+  fromDate: string;
+  toDate: string;
+}
+
 export interface ExerciseDetailDTO {
   exercise: ExerciseDTO;
+  /** Last session vs the one before it: load and rep progression. */
+  latestProgression: LatestProgression | null;
   currentBest: { weightKg: number; reps: number } | null;
   maxWeight: PerformanceRef | null;
   maxReps: PerformanceRef | null;
@@ -60,6 +68,7 @@ export const exerciseDetailService = {
 
     const detail: ExerciseDetailDTO = {
       exercise: toExerciseDTO(exercise),
+      latestProgression: null,
       currentBest: null,
       maxWeight: null,
       maxReps: null,
@@ -149,6 +158,22 @@ export const exerciseDetailService = {
     detail.currentBest = detail.maxWeight
       ? { weightKg: detail.maxWeight.weightKg, reps: detail.maxWeight.reps }
       : null;
+
+    // Last session vs the previous one (working sets only).
+    const days = new Map<string, { weightKg: number; reps: number }[]>();
+    for (const e of entries) {
+      if (e.setType === "WARMUP") continue;
+      const d = e.date.toISOString().slice(0, 10);
+      const list = days.get(d) ?? [];
+      list.push({ weightKg: toNumber(e.weightKg), reps: e.reps });
+      days.set(d, list);
+    }
+    const dayKeys = Array.from(days.keys()).sort();
+    if (dayKeys.length >= 2) {
+      const [fromDate, toDate] = dayKeys.slice(-2);
+      const p = describeProgression(days.get(fromDate)!, days.get(toDate)!);
+      if (p.load || p.reps) detail.latestProgression = { ...p, fromDate, toDate };
+    }
 
     detail.totalSessions = byDay.size;
     detail.progression = Array.from(byDay.values()).sort((a, b) =>

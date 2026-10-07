@@ -7,6 +7,7 @@ import {
   intentOf,
   looksLikeQuestion,
   progressInsight,
+  recentProgressions,
   summaryText,
   usesOnlyKnownNumbers,
   type InsightInput,
@@ -134,5 +135,39 @@ describe("progressInsight", () => {
     expect(progressInsight([{ name: "Squat", points: pts(100, 104, 103) }], 40)).toBeNull();
     expect(progressInsight([{ name: "Squat", points: pts(100, 104, 103) }], 80)).toMatch(/consistency/);
     expect(progressInsight([], null)).toBeNull();
+  });
+});
+
+describe("Violet understands rep progression", () => {
+  const set = (date: string, reps: number, weightKg = 80, name = "Bench Press") => ({ date, exerciseName: name, weightKg, reps });
+
+  it("detects 80x8 -> 80x10 as a rep improvement, not 'no improvement'", () => {
+    const prog = recentProgressions([set("2026-08-10", 8), set("2026-08-10", 8), set("2026-08-24", 10), set("2026-08-24", 9)], NOW, 30);
+    expect(prog).toEqual([{ lift: "Bench Press", kind: "REPS", weightKg: 80, from: 8, to: 10, delta: 2 }]);
+
+    const snap = buildInsightSnapshot({ ...base, e1rm: [], progressions: prog });
+    expect(snap.missing.join(" ")).not.toMatch(/strength trends/);
+    expect(answerFromSnapshot("strength", snap)).toContain("Your bench press improved from 8 to 10 reps at 80 kg.");
+    const text = summaryText(composeSummary(snap));
+    expect(text).toContain("Bench Press: 8 → 10 reps at 80 kg");
+    expect(text).not.toMatch(/no improvement/i);
+  });
+
+  it("reports load progression separately and ignores warm-ups and stale sessions", () => {
+    const prog = recentProgressions(
+      [set("2026-08-10", 8, 77.5), set("2026-08-24", 8, 80), { ...set("2026-08-24", 10, 100), setType: "WARMUP" }, set("2026-05-01", 5, 50, "Old"), set("2026-05-08", 8, 60, "Old")],
+      NOW,
+      30
+    );
+    expect(prog).toEqual([{ lift: "Bench Press", kind: "LOAD", weightKg: 80, from: 77.5, to: 80, delta: 2.5 }]);
+  });
+
+  it("does not compare different loads as rep progress", () => {
+    expect(recentProgressions([set("2026-08-10", 10, 100), set("2026-08-24", 15, 60)], NOW, 30)).toEqual([]);
+  });
+
+  it("the AI number guard accepts the precomputed progression figures", () => {
+    const snap = buildInsightSnapshot({ ...base, progressions: [{ lift: "Bench Press", kind: "LOAD", weightKg: 80, from: 77.5, to: 80, delta: 2.5 }] });
+    expect(usesOnlyKnownNumbers("Bench load rose from 77.5 to 80 kg (+2.5 kg).", snap)).toBe(true);
   });
 });

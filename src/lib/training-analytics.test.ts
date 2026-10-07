@@ -219,3 +219,26 @@ describe("buildProgressMatrix", () => {
     expect(m.columns[1].prs).toBe(1); // lat pulldown
   });
 });
+
+describe("progress matrix: rep progression", () => {
+  const now = new Date("2026-09-20T10:00:00Z");
+  const rows = [
+    set("2026-07-05", "Bench Press", 8, 80),
+    set("2026-08-05", "Bench Press", 10, 80),
+    set("2026-07-05", "Squat", 5, 100),
+    set("2026-08-05", "Squat", 5, 100),
+  ];
+  const m = buildProgressMatrix(rows, "month", 3, now);
+  const byName = Object.fromEntries(m.rows.map((r) => [r.name, r]));
+
+  it("marks more reps at the same load as improvement with the rep gain", () => {
+    const bench = byName["Bench Press"];
+    expect(bench.cells[1]).toMatchObject({ improved: true, repDelta: 2 });
+    expect(bench.trend).toMatchObject({ kind: "reps", repDelta: 2, atKg: 80 });
+  });
+
+  it("an unchanged lift is still 'holding steady'", () => {
+    expect(byName["Squat"].trend.kind).toBe("flat");
+    expect(byName["Squat"].cells[1]).toMatchObject({ improved: null, repDelta: null });
+  });
+});

@@ -1,6 +1,8 @@
 import { answerWithAi } from "@/ai/coach-qa";
 import { aiProviderLabel } from "@/ai/client";
 import { analyticsService } from "@/lib/services/analytics";
+import { exerciseEntryRepository } from "@/lib/repositories/exercise";
+import { requireViewerAthlete } from "@/lib/services/context";
 import { bodyWeightService } from "@/lib/services/bodyWeight";
 import { checkInService } from "@/lib/services/checkin";
 import { goalService } from "@/lib/services/goal";
@@ -9,10 +11,12 @@ import { noteService } from "@/lib/services/note";
 import { nutritionService } from "@/lib/services/nutrition";
 import { requireOwnerAthlete } from "@/lib/services/context";
 import { todayIso } from "@/lib/dates";
+import { toNumber } from "@/lib/dto";
 import {
   answerFromSnapshot,
   buildInsightSnapshot,
   intentOf,
+  recentProgressions,
   usesOnlyKnownNumbers,
   type InsightSnapshot,
 } from "@/lib/violet-insights";
@@ -28,7 +32,8 @@ const WINDOW_DAYS = 30;
 
 /** Evidence for Violet's observations (viewer-safe numbers only; no note text). */
 export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = new Date()): Promise<InsightSnapshot> {
-  const [analytics, weights, measurements, nutrition, goals, recovery, notes] = await Promise.all([
+  const { athleteId } = await requireViewerAthlete();
+  const [analytics, weights, measurements, nutrition, goals, recovery, notes, entries] = await Promise.all([
     analyticsService.get(windowDays <= 30 ? "30D" : "3M", now),
     bodyWeightService.list(),
     measurementService.listEntries(),
@@ -36,6 +41,7 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
     goalService.active(),
     checkInService.overview(todayIso(now), 30),
     noteService.list(),
+    exerciseEntryRepository.list(athleteId),
   ]);
 
   const cutoff = now.getTime() - windowDays * 86_400_000;
@@ -53,6 +59,17 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
     adherencePct: analytics.adherence?.pct ?? null,
     avgSessionRpe: analytics.totals.avgSessionRpe,
     e1rm: analytics.e1rmTrends.map((t) => ({ name: t.name, changePct: t.changePct })),
+    progressions: recentProgressions(
+      entries.map((e) => ({
+        date: e.date.toISOString(),
+        exerciseName: e.exercise?.name ?? "",
+        weightKg: toNumber(e.weightKg),
+        reps: e.reps,
+        setType: e.setType,
+      })),
+      now,
+      windowDays
+    ),
     nutrition: nutrition.map((n) => ({ date: n.entryDate, calories: n.calories, protein: n.protein, water: n.water })),
     goals: goals.map((g) => ({
       title: g.title,

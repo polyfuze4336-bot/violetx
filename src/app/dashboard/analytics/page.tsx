@@ -170,7 +170,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: { 
                     <span className="font-medium">{p.exerciseName}</span>
                   </span>
                   <span className="tabular-nums text-muted-foreground">
-                    {formatNumber(p.weightKg)} kg × {p.reps} · {formatDate(p.date)}
+                    {p.type === "REPS" ? "Rep PR" : "Weight PR"} · {formatNumber(p.weightKg)} kg × {p.reps} · {formatDate(p.date)}
                   </span>
                 </li>
               ))}

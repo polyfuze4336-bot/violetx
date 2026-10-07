@@ -112,6 +112,9 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
 
     let maxWeight = 0;
     let maxWeightReps = 0;
+    // Rep records are contextual to the load, keyed to 0.01 kg to tolerate
+    // decimal representation (e.g. 82.5 vs 82.50).
+    const loadKey = (w: number) => Math.round(w * 100);
     const bestRepsAtWeight = new Map<number, number>();
     let hasBaseline = false;
 
@@ -120,7 +123,7 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
         hasBaseline = true;
         maxWeight = s.weightKg;
         maxWeightReps = s.reps;
-        bestRepsAtWeight.set(s.weightKg, s.reps);
+        bestRepsAtWeight.set(loadKey(s.weightKg), s.reps);
         continue;
       }
 
@@ -138,12 +141,14 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
         maxWeight = s.weightKg;
         maxWeightReps = s.reps;
         bestRepsAtWeight.set(
-          s.weightKg,
-          Math.max(bestRepsAtWeight.get(s.weightKg) ?? 0, s.reps)
+          loadKey(s.weightKg),
+          Math.max(bestRepsAtWeight.get(loadKey(s.weightKg)) ?? 0, s.reps)
         );
       } else {
-        const prevReps = bestRepsAtWeight.get(s.weightKg) ?? 0;
-        if (s.reps > prevReps) {
+        const prevReps = bestRepsAtWeight.get(loadKey(s.weightKg)) ?? 0;
+        // A rep PR needs an earlier best at this SAME load; a first set at a
+        // new, lighter load is just a new reference point, not a record.
+        if (prevReps > 0 && s.reps > prevReps) {
           events.push({
             exerciseId: s.exerciseId,
             exerciseName: s.exerciseName,
@@ -152,17 +157,56 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
             reps: s.reps,
             type: "REPS",
             prevWeightKg: s.weightKg,
-            prevReps: prevReps || null,
+            prevReps,
           });
-          bestRepsAtWeight.set(s.weightKg, s.reps);
+          bestRepsAtWeight.set(loadKey(s.weightKg), s.reps);
           if (s.weightKg === maxWeight) maxWeightReps = s.reps;
         } else {
-          bestRepsAtWeight.set(s.weightKg, Math.max(prevReps, s.reps));
+          bestRepsAtWeight.set(loadKey(s.weightKg), Math.max(prevReps, s.reps));
         }
       }
     }
   }
 
-  events.sort((a, b) => b.date.localeCompare(a.date));
-  return events;
+  return collapseSameDayEvents(events).sort((a, b) =>
+    b.date.localeCompare(a.date)
+  );
+}
+
+/**
+ * Several sets in one session can each beat the old record (8 → 9 → 10 reps).
+ * Keep one achievement per exercise/day/type (and load, for rep PRs): the best
+ * one, measured against the record that stood before the session.
+ */
+function collapseSameDayEvents(events: PrEvent[]): PrEvent[] {
+  const best = new Map<string, PrEvent>();
+  for (const e of events) {
+    const key = `${e.exerciseId}|${e.date.slice(0, 10)}|${e.type}|${
+      e.type === "REPS" ? Math.round(e.weightKg * 100) : ""
+    }`;
+    const cur = best.get(key);
+    if (!cur) {
+      best.set(key, e);
+      continue;
+    }
+    const better = e.type === "WEIGHT" ? e.weightKg > cur.weightKg : e.reps > cur.reps;
+    best.set(key, better ? { ...e, prevWeightKg: cur.prevWeightKg, prevReps: cur.prevReps } : cur);
+  }
+  return Array.from(best.values());
+}
+
+/** Short label and detail for a PR event: load PRs vs rep PRs (same load). */
+export function prEventDetail(e: Pick<PrEvent, "type" | "weightKg" | "reps" | "prevWeightKg" | "prevReps">): {
+  label: string;
+  detail: string;
+} {
+  if (e.type === "REPS") {
+    const d = e.prevReps !== null ? e.reps - e.prevReps : null;
+    return {
+      label: "Rep PR",
+      detail: d !== null ? `+${d} rep${d === 1 ? "" : "s"} at ${e.weightKg} kg` : `${e.reps} reps at ${e.weightKg} kg`,
+    };
+  }
+  const d = e.prevWeightKg !== null ? Math.round((e.weightKg - e.prevWeightKg) * 10) / 10 : null;
+  return { label: "Weight PR", detail: d !== null ? `+${d} kg` : `${e.weightKg} kg` };
 }

@@ -18,6 +18,7 @@ import type {
   NoteDTO,
 } from "@/lib/dto";
 import type { PrEventDTO } from "@/lib/services/personalRecord";
+import { prEventDetail } from "@/lib/analytics";
 
 type Filter = "ALL" | "BODY" | "STRENGTH" | "PR";
 
@@ -152,9 +153,7 @@ export function HistoryTimeline({
                         <Row
                           key={i}
                           title={p.exerciseName}
-                          detail={`${formatNumber(p.weightKg)}kg × ${p.reps} — ${
-                            p.type === "WEIGHT" ? "new max weight" : "rep PR"
-                          }`}
+                          detail={`${formatNumber(p.weightKg)}kg × ${p.reps} — ${prEventDetail(p).label.toLowerCase()} ${prEventDetail(p).detail}`}
                         />
                       ))}
                     </Group>

@@ -98,6 +98,33 @@ export default async function ExerciseDetailPage({
         />
       </div>
 
+      {detail.latestProgression && (
+        <Card className="grid gap-3 p-5 sm:grid-cols-2">
+          {detail.latestProgression.load && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Load progression</p>
+              <p className="text-xl font-bold tabular-nums">
+                {detail.latestProgression.load.fromKg} → {detail.latestProgression.load.toKg} kg
+              </p>
+              <p className="text-sm font-semibold text-success">↑ {detail.latestProgression.load.deltaKg} kg</p>
+            </div>
+          )}
+          {detail.latestProgression.reps && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                Rep progression @ {detail.latestProgression.reps.weightKg} kg
+              </p>
+              <p className="text-xl font-bold tabular-nums">
+                {detail.latestProgression.reps.from} → {detail.latestProgression.reps.to} reps
+              </p>
+              <p className="text-sm font-semibold text-success">
+                ↑ {detail.latestProgression.reps.delta} rep{detail.latestProgression.reps.delta === 1 ? "" : "s"} at {detail.latestProgression.reps.weightKg} kg
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       <ExerciseProgression
         progression={detail.progression}
         history={detail.history}

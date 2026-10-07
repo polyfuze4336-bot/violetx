@@ -82,6 +82,8 @@ export type PrType = "WEIGHT" | "REPS" | "E1RM" | "VOLUME";
 export interface PrAchievement {
   type: PrType;
   label: string;
+  /** The load (kg) of the set that achieved it; rep PRs are contextual to it. */
+  weightKg: number;
   value: number;
   previous: number;
   /** Percentage improvement over the previous best. */
@@ -117,18 +119,29 @@ export function detectSetPrs(input: PrCheckInput): PrAchievement[] {
     out.push({
       type: "WEIGHT",
       label: "Weight PR",
+      weightKg: set.weightKg,
       value: set.weightKg,
       previous: bests.maxWeightKg,
       deltaPct: pct(set.weightKg, bests.maxWeightKg),
     });
   } else {
-    // Rep PR: more reps than ever done at this weight or heavier.
-    const heavierOrEqual = prior.filter((s) => s.weightKg >= set.weightKg);
-    const prevMaxReps = Math.max(0, ...heavierOrEqual.map((s) => s.reps));
-    if (heavierOrEqual.length > 0 && set.reps > prevMaxReps) {
+    // Rep PR: the most reps ever done at this SAME load (0.01 kg tolerance).
+    // A heavier or lighter record never counts: 60 kg × 15 is not compared
+    // with 100 kg × 10. A load with no earlier history is a new reference
+    // point, not a record. Sets already logged this session count too, so
+    // 80 × 10 followed by 80 × 9 does not celebrate twice.
+    const sameLoad = (w: number) => Math.abs(w - set.weightKg) < 0.01;
+    const priorSame = prior.filter((s) => sameLoad(s.weightKg));
+    const prevMaxReps = Math.max(0, ...priorSame.map((s) => s.reps));
+    const sessionMaxReps = Math.max(
+      0,
+      ...workingSets(sessionSetsSoFar).filter((s) => sameLoad(s.weightKg)).map((s) => s.reps)
+    );
+    if (priorSame.length > 0 && set.reps > Math.max(prevMaxReps, sessionMaxReps)) {
       out.push({
         type: "REPS",
         label: "Rep PR",
+        weightKg: set.weightKg,
         value: set.reps,
         previous: prevMaxReps,
         deltaPct: pct(set.reps, prevMaxReps),
@@ -141,6 +154,7 @@ export function detectSetPrs(input: PrCheckInput): PrAchievement[] {
     out.push({
       type: "E1RM",
       label: "Estimated 1RM PR",
+      weightKg: set.weightKg,
       value: e1rm,
       previous: bests.maxE1rm,
       deltaPct: pct(e1rm, bests.maxE1rm),
@@ -155,6 +169,7 @@ export function detectSetPrs(input: PrCheckInput): PrAchievement[] {
     out.push({
       type: "VOLUME",
       label: "Volume PR",
+      weightKg: set.weightKg,
       value: Math.round(sessionVolume),
       previous: Math.round(bests.bestSessionVolumeKg),
       deltaPct: pct(sessionVolume, bests.bestSessionVolumeKg),
@@ -269,4 +284,62 @@ export function suggestProgression(
 /** One-line formatter for the previous-performance list. */
 export function formatSet(s: { weightKg: number; reps: number }): string {
   return `${s.weightKg} kg × ${s.reps}`;
+}
+
+// --- Load vs rep progression -------------------------------------------------
+
+export interface ProgressionSummary {
+  /** Heavier top weight than last time. */
+  load: { fromKg: number; toKg: number; deltaKg: number } | null;
+  /** More reps at the same load (the heaviest load that improved). */
+  reps: { weightKg: number; from: number; to: number; delta: number } | null;
+}
+
+const SAME_LOAD = 0.01;
+
+/**
+ * Compare this session's working sets with the previous session's. Both kinds
+ * of progress count: a heavier top set (load) and more reps at the same weight
+ * (reps). Pure; callers pass working sets only.
+ */
+export function describeProgression(
+  previous: { weightKg: number; reps: number }[],
+  current: { weightKg: number; reps: number }[]
+): ProgressionSummary {
+  if (previous.length === 0 || current.length === 0) return { load: null, reps: null };
+
+  const prevTop = Math.max(...previous.map((s) => s.weightKg));
+  const curTop = Math.max(...current.map((s) => s.weightKg));
+  const load =
+    curTop > prevTop + SAME_LOAD
+      ? { fromKg: prevTop, toKg: curTop, deltaKg: round1(curTop - prevTop) }
+      : null;
+
+  let reps: ProgressionSummary["reps"] = null;
+  for (const c of current) {
+    const bestNow = Math.max(...current.filter((s) => Math.abs(s.weightKg - c.weightKg) < SAME_LOAD).map((s) => s.reps));
+    const before = previous.filter((s) => Math.abs(s.weightKg - c.weightKg) < SAME_LOAD).map((s) => s.reps);
+    if (before.length === 0) continue;
+    const bestBefore = Math.max(...before);
+    if (bestNow > bestBefore && (!reps || c.weightKg > reps.weightKg)) {
+      reps = { weightKg: c.weightKg, from: bestBefore, to: bestNow, delta: bestNow - bestBefore };
+    }
+  }
+  return { load, reps };
+}
+
+/** One-line explanation of a PR, e.g. "+2 reps at 80 kg (previous best 8)". */
+export function prDetail(a: PrAchievement): string {
+  switch (a.type) {
+    case "REPS": {
+      const d = a.value - a.previous;
+      return `+${d} rep${d === 1 ? "" : "s"} at ${a.weightKg} kg (previous best ${a.previous})`;
+    }
+    case "WEIGHT":
+      return `+${round1(a.value - a.previous)} kg (previous best ${a.previous} kg)`;
+    case "E1RM":
+      return `Estimated 1RM ${a.value} kg (+${a.deltaPct}%)`;
+    default:
+      return `Session volume ${a.value.toLocaleString()} kg (+${a.deltaPct}%)`;
+  }
 }
