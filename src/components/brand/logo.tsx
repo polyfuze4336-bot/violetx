@@ -21,12 +21,12 @@ export function Logo({
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#6D28D9" />
-          <stop offset="55%" stopColor="#9333EA" />
-          <stop offset="100%" stopColor="#C026D3" />
+          <stop offset="0%" stopColor="#F28C1E" />
+          <stop offset="55%" stopColor="#E2620F" />
+          <stop offset="100%" stopColor="#B03A16" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="13" fill={`url(#${gradientId})`} />
+      <rect width="48" height="48" rx="9" fill={`url(#${gradientId})`} />
       {/* Falling stroke of the X */}
       <path
         d="M15 15 L33 33"

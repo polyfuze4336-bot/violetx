@@ -76,7 +76,7 @@ export function MalaysiaMap({
         </defs>
         <rect width={VIEW_W} height={VIEW_H} fill="url(#grid)" />
 
-        {/* Purple exploration radius around visited branches (overlaps blend) */}
+        {/* Primary-colour exploration radius around visited branches (overlaps blend) */}
         {points
           .filter((p) => p.branch.visited)
           .map((p) => (

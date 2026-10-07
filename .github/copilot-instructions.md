@@ -70,9 +70,9 @@ AI: src/ai/{client,prompts,schemas,tools,parsers,safety,recommendations}
 
 ## Design & mobile-first
 
-- Premium, minimal, futuristic, calm. Deep violet primary + magenta accent used
+- Premium, minimal, futuristic, calm. Industrial, masculine palette: safety-orange primary + rust accent on steel/graphite neutrals, used
   intentionally (VioletX identity, visited gyms, achievement, progression) — not
-  everywhere. Light mode primary; dark mode keeps violet/magenta, not saturated.
+  everywhere. Light mode primary; dark mode uses graphite surfaces, not saturated.
 - Design mobile-first; the Coach dashboard must be excellent on mobile.
 
 ## Azure deployment

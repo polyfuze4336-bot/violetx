@@ -29,7 +29,7 @@ directly.
 - 🏋️ **Strength progression** — reps × weight per exercise; max-weight & rep PRs;
   estimated strength (Epley, clearly labelled).
 - 🗺️ **Gym Journey** — explore Anytime Fitness Malaysia on an interactive map with
-  a purple exploration radius and achievements.
+  an orange exploration radius and achievements.
 - 🥗 **Nutrition** — optional logging and general nutrition guidance.
 - 📈 **Trends & charts** — visualise change over time (Recharts, irregular dates).
 - 👥 **Two roles** — Owner (Patient X, full CRUD + AI) and Coach (read-only,
@@ -40,13 +40,13 @@ directly.
 ## Design & branding
 
 The interface is a premium, minimal, futuristic and calm SaaS design inspired by
-Apple Fitness/Health — with an original **deep violet** primary and **magenta**
+Apple Fitness/Health — with an industrial **safety-orange** primary on steel/graphite neutrals with a **rust**
 accent used intentionally (VioletX identity, visited gyms, achievement,
 progression), not everywhere. It favours generous whitespace, large rounded
 cards, subtle borders/shadows, glass navigation, large metric typography, and a
 mobile-first experience with a bottom navigation bar.
 
-The **VioletX** app icon is an abstract violet-gradient **X** whose rising stroke
+The **VioletX** app icon is an abstract orange-gradient **X** whose rising stroke
 doubles as an upward progression line — rendered into favicon, Apple touch icon
 and PWA sizes from a single SVG (see [`src/components/brand/logo.tsx`](src/components/brand/logo.tsx)
 and [`scripts/gen-icons.mjs`](scripts/gen-icons.mjs)).
