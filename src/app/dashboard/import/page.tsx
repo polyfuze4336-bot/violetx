@@ -23,7 +23,7 @@ export default async function ImportPage() {
     <div>
       <PageHeader
         title="Import from WhatsApp"
-        description="Paste a message and turn it into structured fitness records."
+        description="Upload a WhatsApp chat export or paste a message and turn it into structured fitness records."
       />
       <ImportClient
         types={types}

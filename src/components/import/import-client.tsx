@@ -23,7 +23,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { toDateInputValue } from "@/lib/format";
-import { parseWhatsAppMessage } from "@/lib/whatsapp-parser";
+import { parseWhatsAppMessage, type ParsedImport } from "@/lib/whatsapp-parser";
+import type { ExportDay } from "@/lib/whatsapp-export";
+import { ChatExportImport } from "@/components/import/chat-export-import";
 import { resolveMeasurementUnit } from "@/lib/whatsapp-parser";
 import {
   checkImportDuplicatesAction,
@@ -160,9 +162,29 @@ export function ImportClient({
   }
 
   function handleParse() {
+    loadParsed(parseWhatsAppMessage(raw));
+  }
+
+  // Load a day from an uploaded chat export into the review editor.
+  function handleReviewDay(day: ExportDay) {
+    setRaw(day.sourceText);
+    loadParsed({
+      date: day.date,
+      weightKg: day.weightKg,
+      measurements: day.measurements,
+      sets: day.sets,
+      unparsedLines: [],
+    });
+    setTimeout(() => {
+      document
+        .getElementById("import-review")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  function loadParsed(result: ParsedImport) {
     setError(null);
     setSummary(null);
-    const result = parseWhatsAppMessage(raw);
     const nextDate = result.date ?? toDateInputValue();
     const nextWeight = result.weightKg != null ? String(result.weightKg) : "";
     const nextMeas: EditableMeasurement[] = result.measurements.map((m) => ({
@@ -271,6 +293,12 @@ export function ImportClient({
         </Card>
       )}
 
+      <ChatExportImport
+        types={types}
+        defaultMeasurementUnit={defaultMeasurementUnit}
+        onReview={handleReviewDay}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Paste your fitness update</CardTitle>
@@ -305,7 +333,7 @@ export function ImportClient({
       </Card>
 
       {parsed && (
-        <Card>
+        <Card id="import-review">
           <CardHeader>
             <CardTitle className="text-base">Review Import</CardTitle>
             <CardDescription>
