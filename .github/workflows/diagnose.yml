@@ -1,0 +1,28 @@
+name: Diagnose (temporary)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Recent exceptions
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt extension.dynamic_install_allow_preview=true >/dev/null
+          az monitor app-insights query -g rg-violetx --app violetx-ai --offset 3h \
+            --analytics-query "exceptions | order by timestamp desc | take 8 | project timestamp, type, outerMessage=substring(outerMessage,0,700), problemId" -o json || true
+          az monitor app-insights query -g rg-violetx --app violetx-ai --offset 3h \
+            --analytics-query "requests | where success == false | order by timestamp desc | take 8 | project timestamp, name, resultCode, duration" -o json || true
