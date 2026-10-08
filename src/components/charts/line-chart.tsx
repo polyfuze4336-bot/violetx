@@ -23,6 +23,8 @@ export interface ProgressLineChartProps {
   series: ChartSeries[];
   unit?: string;
   height?: number;
+  /** Flip the value axis (assisted lifts: less assistance is stronger, so it plots higher). */
+  reverseY?: boolean;
 }
 
 export function ProgressLineChart({
@@ -31,6 +33,7 @@ export function ProgressLineChart({
   series,
   unit,
   height = 280,
+  reverseY = false,
 }: ProgressLineChartProps) {
   // A single record has no progression to draw — show the value instead.
   if (data.length === 1) {
@@ -95,6 +98,7 @@ export function ProgressLineChart({
           width={44}
           className="fill-muted-foreground"
           domain={["auto", "auto"]}
+          reversed={reverseY}
           unit={unit ? ` ${unit}` : undefined}
         />
         <Tooltip

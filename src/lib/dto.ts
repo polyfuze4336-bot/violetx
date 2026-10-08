@@ -1,3 +1,4 @@
+import { isAssistedExercise } from "@/lib/progression-type";
 import type {
   Athlete,
   BodyWeightEntry,
@@ -86,6 +87,8 @@ export interface ExerciseEntryDTO {
   position: number;
   note: string | null;
   source: Source;
+  /** Assisted exercise: weightKg is assistance (less = stronger). */
+  assisted?: boolean;
 }
 
 export interface NoteDTO {
@@ -173,6 +176,7 @@ export function toExerciseEntryDTO(
     position: e.position,
     note: e.note,
     source: (e.source as Source) ?? "MANUAL",
+    assisted: isAssistedExercise(e.exercise),
   };
 }
 

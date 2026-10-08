@@ -48,7 +48,9 @@ const cmp = (a: unknown, b: unknown) =>
   a instanceof Date && b instanceof Date ? a.getTime() - b.getTime() : Number(a) - Number(b);
 
 function matches(value: unknown, cond: unknown): boolean {
-  if (cond === null || typeof cond !== "object" || cond instanceof Date) {
+  // A column that was never set reads as NULL, like the database.
+  if (cond === null) return value === null || value === undefined;
+  if (typeof cond !== "object" || cond instanceof Date) {
     return value instanceof Date && cond instanceof Date ? value.getTime() === cond.getTime() : value === cond;
   }
   return Object.entries(cond as Record<string, unknown>).every(([op, v]) => {
@@ -111,7 +113,76 @@ export class FakePrisma {
   /** Every attempted write, e.g. "exercise.create". Tests assert this stays empty. */
   readonly writes: string[] = [];
 
-  constructor(readonly tables: Record<string, Row[]>) {}
+  private seq = 0;
+
+  /**
+   * @param writable when true, writes are APPLIED (so a whole user journey can run
+   * against real services); when false (default) they are only recorded.
+   */
+  constructor(
+    readonly tables: Record<string, Row[]>,
+    private readonly writable = false
+  ) {}
+
+  private apply = (model: string, method: string, args: Record<string, unknown>): unknown => {
+    const rows = (this.tables[model] ??= []);
+    const now = new Date();
+    const build = (data: Row): Row => ({
+      id: `gen-${model}-${++this.seq}`,
+      createdAt: now,
+      updatedAt: now,
+      ...data,
+    });
+    const patch = (row: Row, data: Row) => {
+      for (const [k, v] of Object.entries(data)) {
+        row[k] = v && typeof v === "object" && !(v instanceof Date) && "set" in (v as Row) ? (v as Row).set : v;
+      }
+      row.updatedAt = now;
+    };
+    const w = args.where as Record<string, unknown> | undefined;
+    switch (method) {
+      case "create": {
+        const row = build(args.data as Row);
+        rows.push(row);
+        return this.resolve(model, row, args.include as Record<string, unknown> | undefined);
+      }
+      case "createMany": {
+        const data = args.data as Row[];
+        data.forEach((d) => rows.push(build(d)));
+        return { count: data.length };
+      }
+      case "update": {
+        const hit = rows.find((r) => where(r, w));
+        if (!hit) throw new Error(`fake-prisma: ${model}.update found nothing`);
+        patch(hit, args.data as Row);
+        return hit;
+      }
+      case "updateMany": {
+        const hits = rows.filter((r) => where(r, w));
+        hits.forEach((h) => patch(h, args.data as Row));
+        return { count: hits.length };
+      }
+      case "upsert": {
+        const hit = rows.find((r) => where(r, w));
+        if (hit) {
+          patch(hit, args.update as Row);
+          return hit;
+        }
+        const row = build({ ...(w ?? {}), ...(args.create as Row) });
+        rows.push(row);
+        return row;
+      }
+      case "delete":
+      case "deleteMany": {
+        const keep = rows.filter((r) => !where(r, w));
+        const count = rows.length - keep.length;
+        this.tables[model] = keep;
+        return method === "delete" ? {} : { count };
+      }
+      default:
+        throw new Error(`fake-prisma: unsupported write ${model}.${method}`);
+    }
+  };
 
   private resolve = (model: string, row: Row, include: Record<string, unknown> | undefined): Row => {
     if (!include) return row;
@@ -149,8 +220,9 @@ export class FakePrisma {
       {
         get: (_t, method: string) => {
           if (WRITE_METHODS.has(method)) {
-            return async () => {
+            return async (args: Record<string, unknown> = {}) => {
               this.writes.push(`${model}.${method}`);
+              if (this.writable) return this.apply(model, method, args);
               return method.endsWith("Many") ? { count: 0 } : {};
             };
           }
@@ -165,7 +237,17 @@ export class FakePrisma {
             case "count":
               return async (args?: { where?: Record<string, unknown> }) => rows().filter((r) => where(r, args?.where)).length;
             case "aggregate":
-              return async () => ({ _max: {}, _min: {}, _count: rows().length });
+              return async (args?: { where?: Record<string, unknown>; _max?: Record<string, boolean>; _min?: Record<string, boolean> }) => {
+                const hits = rows().filter((r) => where(r, args?.where));
+                const pick = (fields: Record<string, boolean> | undefined, fn: (n: number[]) => number) =>
+                  Object.fromEntries(
+                    Object.keys(fields ?? {}).map((f) => {
+                      const vals = hits.map((r) => r[f]).filter((v) => typeof v === "number") as number[];
+                      return [f, vals.length ? fn(vals) : null];
+                    })
+                  );
+                return { _max: pick(args?._max, (v) => Math.max(...v)), _min: pick(args?._min, (v) => Math.min(...v)), _count: hits.length };
+              };
             default:
               throw new Error(`fake-prisma: unsupported ${model}.${method}`);
           }
@@ -183,7 +265,8 @@ export class FakePrisma {
           if (prop === "$transaction") {
             return async (arg: unknown) => {
               this.writes.push("$transaction");
-              return typeof arg === "function" ? (arg as (c: unknown) => unknown)(this.client()) : [];
+              if (typeof arg === "function") return (arg as (c: unknown) => unknown)(this.client());
+              return this.writable ? Promise.all(arg as Promise<unknown>[]) : [];
             };
           }
           if (prop === "$executeRaw" || prop === "$queryRaw") {

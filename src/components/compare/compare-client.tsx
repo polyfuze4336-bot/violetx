@@ -23,6 +23,8 @@ export interface BodySeries {
 }
 export interface StrengthSeries {
   name: string;
+  /** Assisted lift: weightKg is assistance, so less is stronger. */
+  assisted?: boolean;
   points: { date: string; weightKg: number; reps: number }[]; // ascending
 }
 
@@ -121,13 +123,17 @@ export function CompareClient({
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {strengthSeries.map((s) => {
             const startPerf = atOrBefore(s.points, start);
+            const assisted = !!s.assisted;
             const current = s.points.reduce((best, p) =>
-              p.weightKg > best.weightKg ||
+              (assisted ? p.weightKg < best.weightKg : p.weightKg > best.weightKg) ||
               (p.weightKg === best.weightKg && p.reps > best.reps)
                 ? p
                 : best
             );
-            const increase = current.weightKg - startPerf.weightKg;
+            const increase = assisted
+              ? startPerf.weightKg - current.weightKg
+              : current.weightKg - startPerf.weightKg;
+            const unitSuffix = assisted ? "kg assistance" : "kg";
             return (
               <div key={s.name} className="rounded-xl border p-4">
                 <p className="font-semibold">{s.name}</p>
@@ -135,13 +141,13 @@ export function CompareClient({
                   <div>
                     <p className="text-xs text-muted-foreground">Start</p>
                     <p className="tabular-nums">
-                      {startPerf.weightKg}kg × {startPerf.reps}
+                      {startPerf.weightKg}{unitSuffix} × {startPerf.reps}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Current</p>
                     <p className="tabular-nums">
-                      {current.weightKg}kg × {current.reps}
+                      {current.weightKg}{unitSuffix} × {current.reps}
                     </p>
                   </div>
                 </div>
@@ -151,8 +157,13 @@ export function CompareClient({
                     increase > 0 ? "text-success" : "text-muted-foreground"
                   )}
                 >
-                  Maximum load {increase >= 0 ? "increase" : "change"}:{" "}
-                  {formatDelta(increase)}kg
+                  {assisted
+                    ? increase >= 0
+                      ? "Assistance reduced"
+                      : "Assistance increased"
+                    : `Maximum load ${increase >= 0 ? "increase" : "change"}`}
+                  :{" "}
+                  {assisted ? `${Math.abs(increase)}kg` : `${formatDelta(increase)}kg`}
                 </p>
               </div>
             );

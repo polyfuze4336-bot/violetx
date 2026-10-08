@@ -20,7 +20,7 @@ import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { HomeHero } from "@/components/dashboard/home-hero";
 import { Sparkline } from "@/components/charts/sparkline";
-import { computeSeriesStats, type SeriesStats } from "@/lib/analytics";
+import { computeSeriesStats, prEventDetail, type SeriesStats } from "@/lib/analytics";
 import {
   formatDate,
   formatDelta,
@@ -355,7 +355,7 @@ export default async function DashboardOverviewPage() {
                           </p>
                         </div>
                         <span className="font-semibold tabular-nums">
-                          {s.weightKg}kg × {s.reps}
+                          {s.weightKg}kg{s.assisted ? " assistance" : ""} × {s.reps}
                         </span>
                       </li>
                     ))}
@@ -392,11 +392,11 @@ function RecentPrCard({ pr }: { pr: PrEventDTO | null }) {
           <div className="space-y-1">
             <p className="text-lg font-semibold">{pr.exerciseName}</p>
             <p className="text-2xl font-bold tabular-nums">
-              {formatNumber(pr.weightKg)} kg × {pr.reps} reps
+              {formatNumber(pr.weightKg)} kg{pr.assisted ? " assistance" : ""} × {pr.reps} reps
             </p>
             <div className="flex items-center gap-2 pt-1">
               <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                {pr.type === "WEIGHT" ? "NEW MAX WEIGHT" : "REP PR"}
+                {prEventDetail(pr).label.toUpperCase()}
               </span>
               <span className="text-xs text-muted-foreground">
                 {formatDate(pr.date)}
@@ -567,8 +567,8 @@ function buildTimeline(
       date: e.date,
       icon: "pr",
       title: e.exerciseName,
-      value: `${formatNumber(e.weightKg)}kg × ${e.reps} reps`,
-      change: e.type === "WEIGHT" ? "New maximum weight" : "New rep record",
+      value: `${formatNumber(e.weightKg)}kg${e.assisted ? " assistance" : ""} × ${e.reps} reps`,
+      change: e.type === "WEIGHT" ? "New maximum weight" : e.type === "ASSISTANCE" ? "Less assistance" : "New rep record",
       direction: "flat",
     });
   }

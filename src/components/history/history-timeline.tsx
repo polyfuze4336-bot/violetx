@@ -185,7 +185,7 @@ export function HistoryTimeline({
                         <Row
                           key={s.id}
                           title={s.exerciseName}
-                          detail={`${formatNumber(s.weightKg)}kg × ${s.reps}`}
+                          detail={`${formatNumber(s.weightKg)}kg${s.assisted ? " assistance" : ""} × ${s.reps}`}
                         />
                       ))}
                     </Group>

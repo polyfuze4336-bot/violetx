@@ -52,7 +52,7 @@ export default async function ComparePage() {
   for (const e of [...sets].reverse()) {
     let s = strengthMap.get(e.exerciseName);
     if (!s) {
-      s = { name: e.exerciseName, points: [] };
+      s = { name: e.exerciseName, assisted: e.assisted, points: [] };
       strengthMap.set(e.exerciseName, s);
     }
     s.points.push({ date: e.date, weightKg: e.weightKg, reps: e.reps });

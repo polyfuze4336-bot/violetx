@@ -26,13 +26,21 @@ import { ProgressLineChart } from "@/components/charts/line-chart";
 import { SetForm } from "@/components/strength/set-form";
 import type { ExerciseEntryDTO } from "@/lib/dto";
 import { showsOwnerUi } from "@/lib/rbac";
+import { isAssistedExercise } from "@/lib/progression-type";
 
-/** Reduce a set list to the heaviest set per date for a progression chart. */
-function maxWeightPerDate(entries: ExerciseEntryDTO[]) {
+// The set history is capped so the page stays fast with long histories.
+const HISTORY_ROWS = 100;
+
+/**
+ * Reduce a set list to the best set per date for a progression chart: the
+ * heaviest, or for assisted lifts (weight = assistance) the LOWEST assistance.
+ */
+function bestWeightPerDate(entries: ExerciseEntryDTO[], assisted: boolean) {
   const byDate = new Map<string, number>();
   for (const e of entries) {
     const key = e.date.slice(0, 10);
-    byDate.set(key, Math.max(byDate.get(key) ?? 0, e.weightKg));
+    const cur = byDate.get(key);
+    byDate.set(key, cur === undefined ? e.weightKg : assisted ? Math.min(cur, e.weightKg) : Math.max(cur, e.weightKg));
   }
   return Array.from(byDate.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -53,6 +61,7 @@ export default async function StrengthPage() {
       ])
     : [[], []];
 
+  const assistedIds = new Set(exercises.filter(isAssistedExercise).map((e) => e.id));
   const byExercise = new Map<string, ExerciseEntryDTO[]>();
   for (const e of entries) {
     const list = byExercise.get(e.exerciseId) ?? [];
@@ -96,15 +105,16 @@ export default async function StrengthPage() {
               .filter((ex) => (byExercise.get(ex.id)?.length ?? 0) > 0)
               .map((ex, i) => {
                 const list = byExercise.get(ex.id) ?? [];
-                const chartData = maxWeightPerDate(list);
-                const best = Math.max(...list.map((s) => s.weightKg));
+                const assisted = isAssistedExercise(ex);
+                const chartData = bestWeightPerDate(list, assisted);
+                const best = assisted ? Math.min(...list.map((s) => s.weightKg)) : Math.max(...list.map((s) => s.weightKg));
                 return (
                   <Card key={ex.id}>
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between text-base">
                         <span>{ex.name}</span>
                         <span className="text-sm font-normal text-muted-foreground">
-                          best {best} kg
+                          {assisted ? `lowest assistance ${best} kg` : `best ${best} kg`}
                         </span>
                       </CardTitle>
                     </CardHeader>
@@ -114,14 +124,20 @@ export default async function StrengthPage() {
                         xKey="label"
                         unit="kg"
                         height={200}
+                        reverseY={assisted}
                         series={[
                           {
                             key: "weight",
-                            name: "Top set",
+                            name: assisted ? "Assistance" : "Top set",
                             color: (i % 5) + 1,
                           },
                         ]}
                       />
+                      {assisted && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Lower assistance = stronger. The axis is flipped: higher on the chart means less assistance.
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -131,6 +147,9 @@ export default async function StrengthPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Set history</CardTitle>
+              {entries.length > HISTORY_ROWS && (
+                <p className="text-xs text-muted-foreground">Showing the latest {HISTORY_ROWS} of {entries.length} sets.</p>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -143,12 +162,12 @@ export default async function StrengthPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((e) => (
+                  {entries.slice(0, HISTORY_ROWS).map((e) => (
                     <TableRow key={e.id}>
                       <TableCell>{formatDate(e.date)}</TableCell>
                       <TableCell>{e.exerciseName}</TableCell>
                       <TableCell className="font-medium">
-                        {e.reps} × {e.weightKg} kg
+                        {e.reps} × {e.weightKg} kg{assistedIds.has(e.exerciseId) ? " assistance" : ""}
                       </TableCell>
                       {isOwner && (
                         <TableCell>

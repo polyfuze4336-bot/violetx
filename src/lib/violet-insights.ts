@@ -272,13 +272,15 @@ export type Intent = "progress" | "training" | "strength" | "body" | "nutrition"
 
 export function intentOf(text: string): Intent {
   const t = text.toLowerCase();
-  if (/how am i doing|how'?s my progress|how is my progress|overall|progress/.test(t)) return "progress";
+  // The generic summary only for general phrasing; "strength progress" etc. go to their topic.
+  if (/how am i doing|how'?s my progress|how is my progress|overall/.test(t)) return "progress";
   if (/protein|calorie|nutrition|eat|water|diet|macro/.test(t)) return "nutrition";
   if (/recover|readiness|sleep|sore|tired|fatigue/.test(t)) return "recovery";
   if (/goal|target|on track/.test(t)) return "goals";
   if (/bench|squat|deadlift|press|strength|1rm|pr\b|prs\b|stronger|lift/.test(t)) return "strength";
   if (/weight|waist|body|fat|measure/.test(t)) return "body";
   if (/workout|train|session|frequency|consisten|volume/.test(t)) return "training";
+  if (/progress/.test(t)) return "progress";
   return "general";
 }
 
