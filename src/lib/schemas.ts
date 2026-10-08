@@ -296,7 +296,10 @@ export type CreateNutritionInput = z.infer<typeof createNutritionSchema>;
 
 export const createShareLinkSchema = z.object({
   label: z.string().trim().max(100).optional(),
-  expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
+  /** Days until expiry (1-365), or "never". */
+  expiresInDays: z
+    .union([z.literal("never"), z.coerce.number().int().min(1).max(365)])
+    .default(30),
 });
 export type CreateShareLinkInput = z.input<typeof createShareLinkSchema>;
 

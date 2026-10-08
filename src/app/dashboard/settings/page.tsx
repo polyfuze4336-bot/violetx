@@ -91,11 +91,11 @@ export default async function SettingsPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Coach share link</CardTitle>
+            <CardTitle className="text-base">Share With Coach</CardTitle>
             <CardDescription>
-              Let a coach view your progress without signing in. Links are
-              read-only, expire automatically and can be revoked any time.
-              Notes and nutrition are never shared.
+              Let a coach view your progress without an account or login. The
+              link is private and unguessable, read-only, optionally expires and
+              can be revoked any time. Notes and nutrition are never shared.
             </CardDescription>
           </CardHeader>
           <CardContent>

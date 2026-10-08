@@ -3,20 +3,21 @@ import { exerciseEntryRepository } from "@/lib/repositories/exercise";
 import { measurementEntryRepository } from "@/lib/repositories/measurement";
 import { shareLinkRepository } from "@/lib/repositories/shareLink";
 import { requireOwnerAthlete } from "@/lib/services/context";
+import { derivePersonalRecords, derivePrEvents } from "@/lib/services/personalRecord";
+import { toNumber } from "@/lib/dto";
+import { PATIENT_LABEL } from "@/lib/constants";
+import { isAssistedExercise } from "@/lib/progression-type";
 import {
-  derivePersonalRecords,
-  derivePrEvents,
-  type PersonalRecordDTO,
-  type PrEventDTO,
-} from "@/lib/services/personalRecord";
-import {
-  toBodyWeightDTO,
-  toExerciseEntryDTO,
-  toMeasurementEntryDTO,
-  type BodyWeightDTO,
-  type ExerciseEntryDTO,
-  type MeasurementEntryDTO,
-} from "@/lib/dto";
+  buildAchievements,
+  countByKind,
+  detectE1rmPrs,
+  forCoach,
+  toPublicProgressions,
+  type PublicAchievement,
+  type PublicPrKind,
+  type PublicProgression,
+} from "@/lib/coach-view";
+import { buildInsightSnapshot, composeSummary, recentProgressions } from "@/lib/violet-insights";
 import { NotFoundError } from "@/lib/rbac";
 import { loadGoals } from "@/lib/services/goal";
 import { computeAnalytics } from "@/lib/services/analytics";
@@ -27,6 +28,7 @@ import {
   computeShareExpiry,
   generateShareToken,
   hashShareToken,
+  isNeverExpiring,
   isWellFormedShareToken,
   shareLinkStatus,
   type ShareLinkStatus,
@@ -36,7 +38,8 @@ export interface ShareLinkDTO {
   id: string;
   label: string | null;
   status: ShareLinkStatus;
-  expiresAt: string;
+  /** null = never expires. */
+  expiresAt: string | null;
   createdAt: string;
   lastViewedAt: string | null;
 }
@@ -47,12 +50,30 @@ export interface CreatedShareLinkDTO {
   token: string;
 }
 
+/**
+ * Everything a coach link can show. Deliberately built from explicit, minimal
+ * shapes: no database ids, emails, notes, nutrition, imports or gym names.
+ */
 export interface SharedProgressDTO {
-  weights: BodyWeightDTO[];
-  measurements: MeasurementEntryDTO[];
-  records: PersonalRecordDTO[];
-  prEvents: PrEventDTO[];
-  recentSets: ExerciseEntryDTO[];
+  weights: { date: string; weightKg: number }[];
+  measurements: { typeName: string; unit: string; date: string; value: number }[];
+  records: {
+    exerciseName: string;
+    /** Assisted: weights are assistance (lower = stronger) and no 1RM estimate. */
+    assisted: boolean;
+    maxWeightKg: number;
+    maxWeightReps: number;
+    maxReps: number;
+    maxRepsWeightKg: number;
+    estimatedOneRepMaxKg: number;
+    lastPerformed: string;
+  }[];
+  /** Weight, rep, estimated-1RM and assistance PRs, newest first. */
+  achievements: PublicAchievement[];
+  prCounts: Record<PublicPrKind, number>;
+  /** Last session vs the one before: load, rep and assistance progression. */
+  progressions: PublicProgression[];
+  recentSets: { exerciseName: string; date: string; reps: number; weightKg: number; assisted: boolean }[];
   /** Goal progress only (no notes). */
   goals: {
     title: string;
@@ -78,11 +99,15 @@ export interface SharedProgressDTO {
     consistencyPct: number | null;
     adherencePct: number | null;
     weeklyVolume: { label: string; volumeKg: number }[];
+    weeklyWorkouts: { label: string; workouts: number }[];
     e1rm: { name: string; changePct: number | null; points: { date: string; e1rm: number }[] }[];
   };
   /** Readiness scores only — never check-in notes or heart rate. */
   readiness: { date: string; score: number }[];
-  expiresAt: string;
+  /** Deterministic Violet observations computed from the data above. */
+  observations: { bullets: string[]; conclusion: string | null };
+  /** null = the link never expires. */
+  expiresAt: string | null;
 }
 
 function toDTO(row: {
@@ -97,7 +122,7 @@ function toDTO(row: {
     id: row.id,
     label: row.label,
     status: shareLinkStatus(row),
-    expiresAt: row.expiresAt.toISOString(),
+    expiresAt: isNeverExpiring(row.expiresAt) ? null : row.expiresAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     lastViewedAt: row.lastViewedAt?.toISOString() ?? null,
   };
@@ -149,24 +174,86 @@ export const shareLinkService = {
       measurementEntryRepository.list(athleteId),
       exerciseEntryRepository.list(athleteId),
       loadGoals(athleteId),
-      listWorkoutsFor(athleteId, 8),
+      listWorkoutsFor(athleteId, 12),
       computeAnalytics(athleteId, "3M"),
       readinessHistory(athleteId, 30),
     ]);
     // Best-effort bookkeeping; never fail the view because of it.
     void shareLinkRepository.touch(link.id).catch(() => undefined);
 
+    const now = new Date();
+    const working = entries.filter((e) => e.setType !== "WARMUP");
+    const setRows = working.map((e) => ({
+      exerciseName: e.exercise?.name ?? "",
+      date: e.date.toISOString(),
+      reps: e.reps,
+      weightKg: toNumber(e.weightKg),
+      assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
+    }));
+    const achievements = buildAchievements(derivePrEvents(entries), detectE1rmPrs(setRows));
+    const assistedNames = new Set(setRows.filter((r) => r.assisted).map((r) => r.exerciseName));
+    const rawProgressions = recentProgressions(setRows, now, 90, assistedNames);
+    const progressions = toPublicProgressions(rawProgressions);
+    const weightReadings = weights.map((w) => ({ date: w.date.toISOString(), value: toNumber(w.weightKg) }));
+    const waist = measurements
+      .filter((m) => /waist/i.test(m.type?.name ?? ""))
+      .map((m) => ({ date: m.date.toISOString(), value: toNumber(m.value) * (m.unit === "INCH" ? 2.54 : 1) }));
+    const last7 = readiness.slice(-7).map((r) => r.score);
+    const summary = composeSummary(
+      buildInsightSnapshot({
+        now,
+        windowDays: 90,
+        weights: weightReadings,
+        waist,
+        workouts: analytics.totals.workouts,
+        workoutsPerWeek: analytics.totals.workoutsPerWeek,
+        prCount: achievements.filter((a) => new Date(a.date).getTime() >= now.getTime() - 90 * 86_400_000).length,
+        consistencyPct: analytics.consistency.pct,
+        adherencePct: analytics.adherence?.pct ?? null,
+        avgSessionRpe: null,
+        e1rm: analytics.e1rmTrends.map((t) => ({ name: t.name, changePct: t.changePct })),
+        progressions: rawProgressions,
+        // Nutrition and notes are private to the athlete and never shared.
+        nutrition: [],
+        goals: goals
+          .filter((g) => g.status === "ACTIVE")
+          .map((g) => ({
+            title: g.title,
+            pct: g.progress.pct,
+            achieved: g.progress.achieved,
+            type: g.type,
+            targetIsLowerThanStart: g.progress.start !== null && g.progress.target < g.progress.start,
+          })),
+        readinessAvg7d: last7.length ? Math.round(last7.reduce((a, b) => a + b, 0) / last7.length) : null,
+        noteCount: 0,
+      })
+    );
+
     return {
-      weights: weights.map((w) => ({ ...toBodyWeightDTO(w), note: null })),
+      weights: weights.map((w) => ({ date: w.date.toISOString(), weightKg: toNumber(w.weightKg) })),
       measurements: measurements.map((m) => ({
-        ...toMeasurementEntryDTO(m),
-        note: null,
+        typeName: m.type?.name ?? "",
+        unit: m.unit,
+        date: m.date.toISOString(),
+        value: toNumber(m.value),
       })),
-      records: derivePersonalRecords(entries),
-      prEvents: derivePrEvents(entries),
-      recentSets: entries
-        .slice(0, 12)
-        .map((e) => ({ ...toExerciseEntryDTO(e), note: null })),
+      records: derivePersonalRecords(entries).map((r) => ({
+        exerciseName: r.exerciseName,
+        assisted: r.assisted,
+        maxWeightKg: r.maxWeightKg,
+        maxWeightReps: r.maxWeightReps,
+        maxReps: r.maxReps,
+        maxRepsWeightKg: r.maxRepsWeightKg,
+        estimatedOneRepMaxKg: r.estimatedOneRepMaxKg,
+        lastPerformed: r.lastPerformed,
+      })),
+      achievements: achievements.slice(0, 30),
+      prCounts: countByKind(achievements),
+      progressions,
+      recentSets: setRows
+        .slice()
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 12),
       goals: goals
         .filter((g) => g.status === "ACTIVE")
         .map((g) => ({
@@ -194,10 +281,15 @@ export const shareLinkService = {
         consistencyPct: analytics.consistency.pct,
         adherencePct: analytics.adherence?.pct ?? null,
         weeklyVolume: analytics.buckets.map((b) => ({ label: b.label, volumeKg: b.volumeKg })),
+        weeklyWorkouts: analytics.buckets.map((b) => ({ label: b.label, workouts: b.workouts })),
         e1rm: analytics.e1rmTrends.map((t) => ({ name: t.name, changePct: t.changePct, points: t.points })),
       },
       readiness,
-      expiresAt: link.expiresAt.toISOString(),
+      observations: {
+        bullets: summary.bullets.filter((b) => !b.startsWith("Not enough data")),
+        conclusion: summary.conclusion ? forCoach(summary.conclusion, PATIENT_LABEL) : null,
+      },
+      expiresAt: isNeverExpiring(link.expiresAt) ? null : link.expiresAt.toISOString(),
     };
   },
 };
