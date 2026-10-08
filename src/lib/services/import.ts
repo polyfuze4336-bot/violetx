@@ -1,5 +1,13 @@
 import { prisma } from "@/lib/db";
 import { requireOwnerAthlete } from "@/lib/services/context";
+import { NotFoundError } from "@/lib/rbac";
+import { STARTER_EXERCISES, starterCreateData } from "@/lib/exercise-library";
+import {
+  buildMatchSources,
+  exerciseIdentityKeys,
+  matchExercise,
+  parseExerciseRef,
+} from "@/lib/exercise-matching";
 import {
   commitImportSchema,
   findDuplicatesSchema,
@@ -22,6 +30,94 @@ export interface DuplicateReport {
   weight: boolean;
   measurements: boolean[];
   sets: boolean[];
+}
+
+interface LibraryRow {
+  id: string;
+  name: string;
+  aliases: string | null;
+}
+
+const MAX_ALIASES_LENGTH = 400;
+
+/**
+ * Find the library exercise a set refers to WITHOUT creating anything: a
+ * confirmed ref first, otherwise an exact name/alias match. Fuzzy corrections
+ * are only ever applied when the user confirmed them (exerciseRef).
+ */
+function findLibraryExercise(
+  library: LibraryRow[],
+  set: { exercise: string; exerciseRef?: string }
+): LibraryRow | null {
+  const ref = parseExerciseRef(set.exerciseRef);
+  if (ref?.kind === "id") return library.find((l) => l.id === ref.id) ?? null;
+  if (ref?.kind === "starter") {
+    const starter = STARTER_EXERCISES.find((s) => s.name === ref.name);
+    if (!starter) return null;
+    const keys = new Set(exerciseIdentityKeys(starter.name, starter.aliases));
+    return library.find((l) => exerciseIdentityKeys(l.name, l.aliases).some((k) => keys.has(k))) ?? null;
+  }
+  const m = matchExercise(set.exercise, buildMatchSources(library, []));
+  const hit = m.status === "EXACT" ? parseExerciseRef(m.candidates[0].ref) : null;
+  return hit?.kind === "id" ? (library.find((l) => l.id === hit.id) ?? null) : null;
+}
+
+/**
+ * Resolve the exercise for one imported set, creating it only when needed:
+ *  1. a ref the user confirmed (validated against the athlete's library / the
+ *     canonical starter list; it can never be an arbitrary id),
+ *  2. an exact name or alias match (so "Lat Pull Down" never duplicates "Lat Pulldown"),
+ *  3. otherwise a new custom exercise with the name as typed.
+ * Historical sets are never rewritten. A confirmed correction is remembered as
+ * an alias so the same spelling resolves exactly next time.
+ */
+async function resolveExerciseForCommit(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  athleteId: string,
+  library: LibraryRow[],
+  set: { exercise: string; exerciseRef?: string },
+  newExercises: string[]
+): Promise<LibraryRow> {
+  const typed = set.exercise.trim();
+  const ref = parseExerciseRef(set.exerciseRef);
+  if (set.exerciseRef && !ref) throw new NotFoundError("That exercise suggestion is not valid. Review the import again.");
+
+  const row = findLibraryExercise(library, set);
+  if (ref?.kind === "id" && !row) {
+    throw new NotFoundError("A selected exercise no longer exists. Review the import again.");
+  }
+
+  if (!row) {
+    let starter = ref?.kind === "starter" ? STARTER_EXERCISES.find((s) => s.name === ref.name) : undefined;
+    if (ref?.kind === "starter" && !starter) throw new NotFoundError("That exercise suggestion is not valid. Review the import again.");
+    if (!ref) {
+      const m = matchExercise(typed, buildMatchSources([], STARTER_EXERCISES));
+      const hit = m.status === "EXACT" ? parseExerciseRef(m.candidates[0].ref) : null;
+      if (hit?.kind === "starter") starter = STARTER_EXERCISES.find((s) => s.name === hit.name);
+    }
+    const created = await tx.exercise.create({
+      data: starter
+        ? { athleteId, ...starterCreateData(starter, ref && exerciseIdentityKeys(typed)[0] !== exerciseIdentityKeys(starter.name)[0] ? typed : undefined) }
+        : { athleteId, name: typed },
+      select: { id: true, name: true, aliases: true },
+    });
+    newExercises.push(created.name);
+    library.push(created);
+    return created;
+  }
+
+  // Remember a confirmed spelling as an alias (unless another exercise owns it).
+  const key = exerciseIdentityKeys(typed)[0];
+  if (ref && key) {
+    const own = new Set(exerciseIdentityKeys(row.name, row.aliases));
+    const taken = library.some((l) => l.id !== row!.id && exerciseIdentityKeys(l.name, l.aliases).includes(key));
+    const next = [row.aliases, typed].filter(Boolean).join(", ");
+    if (!own.has(key) && !taken && next.length <= MAX_ALIASES_LENGTH) {
+      await tx.exercise.update({ where: { id: row.id }, data: { aliases: next } });
+      row.aliases = next;
+    }
+  }
+  return row;
 }
 
 /** UTC day range [start, next) for matching same-day records. */
@@ -75,16 +171,16 @@ export const importService = {
       );
     }
 
+    const library = await prisma.exercise.findMany({
+      where: { athleteId },
+      select: { id: true, name: true, aliases: true },
+    });
     const exerciseIds = new Map<string, string | null>();
     const sets: boolean[] = [];
     for (const s of data.sets) {
-      const key = s.exercise.toLowerCase();
+      const key = `${s.exerciseRef ?? ""}|${exerciseIdentityKeys(s.exercise)[0] ?? s.exercise}`;
       if (!exerciseIds.has(key)) {
-        const ex = await prisma.exercise.findFirst({
-          where: { athleteId, name: s.exercise },
-          select: { id: true },
-        });
-        exerciseIds.set(key, ex?.id ?? null);
+        exerciseIds.set(key, findLibraryExercise(library, s)?.id ?? null);
       }
       const exerciseId = exerciseIds.get(key);
       sets.push(
@@ -119,6 +215,8 @@ export const importService = {
     // Resolve each type/exercise once per import instead of per row.
     const typeCache = new Map<string, { id: string }>();
     const exerciseCache = new Map<string, { id: string }>();
+    // Exercises loaded once per import; grows as exercises are created.
+    const library: LibraryRow[] = [];
 
     return prisma.$transaction(async (tx) => {
       const batch = await tx.importBatch.create({
@@ -130,6 +228,13 @@ export const importService = {
           status: "COMMITTED",
         },
       });
+
+      library.push(
+        ...(await tx.exercise.findMany({
+          where: { athleteId },
+          select: { id: true, name: true, aliases: true },
+        }))
+      );
 
       const summary: ImportSummary = {
         importBatchId: batch.id,
@@ -217,19 +322,12 @@ export const importService = {
           summary.skipped += 1;
           continue;
         }
-        const exerciseKey = set.exercise.toLowerCase();
-        let exercise =
-          exerciseCache.get(exerciseKey) ??
-          (await tx.exercise.findFirst({
-            where: { athleteId, name: set.exercise },
-          }));
+        const exerciseKey = `${set.exerciseRef ?? ""}|${exerciseIdentityKeys(set.exercise)[0] ?? set.exercise}`;
+        let exercise = exerciseCache.get(exerciseKey);
         if (!exercise) {
-          exercise = await tx.exercise.create({
-            data: { athleteId, name: set.exercise },
-          });
-          summary.newExercises.push(set.exercise);
+          exercise = await resolveExerciseForCommit(tx, athleteId, library, set, summary.newExercises);
+          exerciseCache.set(exerciseKey, exercise);
         }
-        exerciseCache.set(exerciseKey, exercise);
         if (set.resolution === "REPLACE") {
           const del = await tx.exerciseEntry.deleteMany({
             where: {

@@ -22,9 +22,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
+  addStarterExerciseAction,
   createExerciseAction,
   seedStarterLibraryAction,
+  suggestExercisesAction,
 } from "@/lib/actions/exercise";
+import { ExerciseNameCheck, type NameDecision } from "@/components/exercises/exercise-name-check";
+import { fuzzyFilter, parseExerciseRef } from "@/lib/exercise-matching";
+import type { ExerciseSuggestionDTO } from "@/lib/services/exerciseMatch";
 import { formatDate } from "@/lib/format";
 import { MUSCLE_GROUPS } from "@/lib/training-analytics";
 import type { ExerciseDTO } from "@/lib/dto";
@@ -38,7 +43,7 @@ export interface ExerciseStats {
   lastPerformed: string;
 }
 
-const PATTERNS = ["Push", "Pull", "Squat", "Hinge", "Lunge", "Carry", "Core", "Isolation"];
+const PATTERNS = ["Push", "Pull", "Squat", "Hinge", "Lunge", "Carry", "Core", "Isolation", "Cardio"];
 
 const categoryFor = (g: string) =>
   g === "Biceps" || g === "Triceps"
@@ -55,16 +60,42 @@ function AddExerciseDialog() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [name, setName] = useState("");
+  const [suggestion, setSuggestion] = useState<ExerciseSuggestionDTO | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // The user chose an existing/canonical exercise instead of a new one.
+  async function pickExisting(d: NameDecision | null) {
+    if (d?.kind !== "ref") return;
+    const ref = parseExerciseRef(d.ref);
+    if (ref?.kind === "starter") {
+      const res = await addStarterExerciseAction(ref.name);
+      if (!res.ok) return setError(res.error);
+    }
+    toast({ title: ref?.kind === "starter" ? `${d.name} added` : `Using existing ${d.name}` });
+    setOpen(false);
+    setSuggestion(null);
+    router.refresh();
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>, confirmedCustom = false) {
     e.preventDefault();
     setError(null);
-    const f = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const f = new FormData(form);
     const get = (k: string) => String(f.get(k) ?? "").trim() || undefined;
     const muscle = get("muscle") ?? "Other";
     startTransition(async () => {
+      if (!confirmedCustom) {
+        // Look for a spelling variant or canonical exercise before creating.
+        const check = await suggestExercisesAction([String(f.get("name") ?? "")]);
+        const s = check.ok ? check.data[0] : undefined;
+        if (s && s.status !== "NONE") {
+          setSuggestion(s.status === "EXACT" ? { ...s, status: "HIGH" } : s);
+          return;
+        }
+      }
       const result = await createExerciseAction({
         name: String(f.get("name") ?? ""),
         muscleGroup: muscle,
@@ -80,6 +111,8 @@ function AddExerciseDialog() {
       if (result.ok) {
         toast({ title: "Exercise added" });
         setOpen(false);
+        setSuggestion(null);
+        setName("");
         router.refresh();
       } else {
         setError(result.error);
@@ -88,7 +121,13 @@ function AddExerciseDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setSuggestion(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4" /> Custom exercise
@@ -98,10 +137,36 @@ function AddExerciseDialog() {
         <DialogHeader>
           <DialogTitle>New exercise</DialogTitle>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form
+          onSubmit={(e) => onSubmit(e, suggestion === null ? false : true)}
+          className="space-y-3"
+        >
           <div className="space-y-1.5">
             <Label htmlFor="ex-name">Name</Label>
-            <Input id="ex-name" name="name" required maxLength={150} />
+            <Input
+              id="ex-name"
+              name="name"
+              required
+              maxLength={150}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setSuggestion(null);
+              }}
+            />
+            {suggestion && (
+              <ExerciseNameCheck
+                name={name}
+                suggestion={suggestion}
+                decision={null}
+                onDecide={(d) => {
+                  if (d?.kind === "custom") {
+                    // Keep as a new custom exercise: submit again, already confirmed.
+                    (document.getElementById("ex-name")?.closest("form") as HTMLFormElement | null)?.requestSubmit();
+                  } else void pickExisting(d);
+                }}
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -180,12 +245,16 @@ export function ExerciseLibrary({
   const visible = exercises.filter((e) => {
     if (!showInactive && !e.active) return false;
     if (muscle !== "All" && e.muscleGroup !== muscle) return false;
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return [e.name, e.aliases, e.equipment, e.muscleGroup, e.secondaryMuscles]
-      .filter(Boolean)
-      .some((v) => v!.toLowerCase().includes(q));
+    return true;
   });
+  // Typo-tolerant search over names and aliases ("lat pulldwon" finds Lat Pulldown).
+  const results = fuzzyFilter(visible, query, (e) => [
+    e.name,
+    ...(e.aliases ?? "").split(","),
+    e.equipment ?? "",
+    e.muscleGroup ?? "",
+    e.secondaryMuscles ?? "",
+  ]);
 
   function loadStarter() {
     startTransition(async () => {
@@ -245,11 +314,11 @@ export function ExerciseLibrary({
         </label>
       </div>
 
-      {visible.length === 0 ? (
+      {results.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No exercises match.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((ex) => {
+          {results.map((ex) => {
             const s = stats[ex.id];
             return (
               <Link key={ex.id} href={`/dashboard/exercises/${ex.id}`} className="group">

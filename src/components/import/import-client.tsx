@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardPaste, Sparkles, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,13 @@ import { toDateInputValue } from "@/lib/format";
 import { parseWhatsAppMessage, type ParsedImport } from "@/lib/whatsapp-parser";
 import type { ExportDay } from "@/lib/whatsapp-export";
 import { ChatExportImport } from "@/components/import/chat-export-import";
+import {
+  ExerciseNameCheck,
+  decisionRef,
+  needsNameDecision,
+  useExerciseSuggestions,
+  type NameDecision,
+} from "@/components/exercises/exercise-name-check";
 import { resolveMeasurementUnit } from "@/lib/whatsapp-parser";
 import {
   checkImportDuplicatesAction,
@@ -46,6 +53,8 @@ interface EditableMeasurement {
 }
 interface EditableSet {
   exercise: string;
+  /** The user's answer to a proposed exercise-name correction. */
+  decision: NameDecision | null;
   reps: string;
   weightKg: string;
   duplicate: boolean;
@@ -134,6 +143,7 @@ export function ImportClient({
       })),
       sets: validSets.map((s) => ({
         exercise: s.exercise.trim(),
+        exerciseRef: decisionRef(s.decision),
         reps: Number(s.reps),
         weightKg: Number(s.weightKg),
       })),
@@ -161,6 +171,41 @@ export function ImportClient({
       })
     );
   }
+
+  const suggestionFor = useExerciseSuggestions(parsed ? sets.map((s) => s.exercise) : []);
+
+  // Re-check duplicates after a confirmed correction: "Lat Pulldwon" may
+  // already exist on this date under the canonical exercise.
+  const decisionSig = sets.map((s) => decisionRef(s.decision) ?? "").join("|");
+  const lastSig = useRef("");
+  useEffect(() => {
+    if (!parsed || decisionSig === lastSig.current) return;
+    lastSig.current = decisionSig;
+    if (!decisionSig.replace(/\|/g, "")) return;
+    void (async () => {
+      const valid = sets.filter((s) => s.exercise.trim() && s.reps && s.weightKg);
+      const res = await checkImportDuplicatesAction({
+        date: new Date(date),
+        measurements: [],
+        sets: valid.map((s) => ({
+          exercise: s.exercise.trim(),
+          exerciseRef: decisionRef(s.decision),
+          reps: Number(s.reps),
+          weightKg: Number(s.weightKg),
+        })),
+      });
+      if (!res.ok) return;
+      let si = 0;
+      setSets((prev) =>
+        prev.map((s) => {
+          if (!(s.exercise.trim() && s.reps && s.weightKg)) return s;
+          const dup = res.data.sets[si++] ?? false;
+          return dup === s.duplicate ? s : { ...s, duplicate: dup, resolution: dup ? "SKIP" : "IMPORT" };
+        })
+      );
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decisionSig, parsed]);
 
   function handleParse() {
     loadParsed(parseWhatsAppMessage(raw));
@@ -198,6 +243,7 @@ export function ImportClient({
     }));
     const nextSets: EditableSet[] = result.sets.map((s) => ({
       exercise: s.exercise,
+      decision: null,
       reps: String(s.reps),
       weightKg: String(s.weightKg),
       duplicate: false,
@@ -206,6 +252,7 @@ export function ImportClient({
     setDate(nextDate);
     setWeightKg(nextWeight);
     setMeasurements(nextMeas);
+    lastSig.current = "";
     setSets(nextSets);
     setUnparsed(result.unparsedLines);
     setParsed(true);
@@ -229,6 +276,7 @@ export function ImportClient({
   const validSets = sets.filter(
     (s) => s.exercise.trim() && s.reps && s.weightKg && s.resolution !== "SKIP"
   );
+  const pendingNames = validSets.filter((s) => needsNameDecision(suggestionFor(s.exercise), s.decision)).length;
   const recordCount =
     (includeWeight ? 1 : 0) + validMeasurements.length + validSets.length;
   const duplicateCount =
@@ -256,6 +304,7 @@ export function ImportClient({
           .filter((s) => s.exercise.trim() && s.reps && s.weightKg)
           .map((s) => ({
             exercise: s.exercise.trim(),
+            exerciseRef: decisionRef(s.decision),
             reps: Number(s.reps),
             weightKg: Number(s.weightKg),
             resolution: s.resolution,
@@ -533,6 +582,7 @@ export function ImportClient({
                       ...p,
                       {
                         exercise: "",
+                        decision: null,
                         reps: "",
                         weightKg: "",
                         duplicate: false,
@@ -555,7 +605,7 @@ export function ImportClient({
                     <Label className="text-xs">Exercise</Label>
                     <Input
                       value={s.exercise}
-                      onChange={(e) => updateSet(i, { exercise: e.target.value })}
+                      onChange={(e) => updateSet(i, { exercise: e.target.value, decision: null })}
                     />
                   </div>
                   <div className="w-20 space-y-1">
@@ -592,6 +642,14 @@ export function ImportClient({
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   )}
+                  <div className="w-full empty:hidden">
+                    <ExerciseNameCheck
+                      name={s.exercise}
+                      suggestion={suggestionFor(s.exercise)}
+                      decision={s.decision}
+                      onDecide={(d) => updateSet(i, { decision: d })}
+                    />
+                  </div>
                   {s.duplicate && (
                     <p className="w-full text-xs text-amber-600 dark:text-amber-400">
                       Possible duplicate — this set already exists on this date.
@@ -613,11 +671,17 @@ export function ImportClient({
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {pendingNames > 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                {pendingNames} exercise name{pendingNames === 1 ? "" : "s"} need{pendingNames === 1 ? "s" : ""} your
+                confirmation above (use the suggestion, choose another, or keep as a new exercise).
+              </p>
+            )}
 
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={handleCommit}
-                disabled={isPending || recordCount === 0}
+                disabled={isPending || recordCount === 0 || pendingNames > 0}
               >
                 {isPending ? "Saving…" : `Save ${recordCount} Records`}
               </Button>

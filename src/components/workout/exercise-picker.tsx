@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { fuzzyFilter } from "@/lib/exercise-matching";
 
 export interface PickerExercise {
   id: string;
@@ -34,10 +35,8 @@ export function ExercisePicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const q = query.trim().toLowerCase();
-  const list = exercises
-    .filter((e) => !q || [e.name, e.muscleGroup, e.equipment].some((v) => v?.toLowerCase().includes(q)))
-    .slice(0, 60);
+  // Typo-tolerant: "lat pulldwon" still finds Lat Pulldown.
+  const list = fuzzyFilter(exercises, query, (e) => [e.name, e.muscleGroup ?? "", e.equipment ?? ""]).slice(0, 60);
 
   return (
     <Dialog

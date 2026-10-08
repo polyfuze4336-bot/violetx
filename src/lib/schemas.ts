@@ -212,6 +212,11 @@ export const parsedMeasurementSchema = z.object({
 
 export const parsedExerciseSetSchema = z.object({
   exercise: z.string().trim().min(1),
+  /**
+   * The user's confirmed choice from the exercise-name review ("id:<id>" or
+   * "starter:<name>"). Validated server-side; absent means exact-match-or-custom.
+   */
+  exerciseRef: z.string().max(200).optional(),
   reps: z.coerce.number().int().min(0).max(10000),
   weightKg: z.coerce.number().min(0).max(2000),
 });

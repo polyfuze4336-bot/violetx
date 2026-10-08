@@ -6,6 +6,11 @@ import {
   exerciseEntryService,
   exerciseService,
 } from "@/lib/services/exercise";
+import {
+  exerciseMatchService,
+  type ExerciseChoiceDTO,
+  type ExerciseSuggestionDTO,
+} from "@/lib/services/exerciseMatch";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
 import type { ExerciseDTO, ExerciseEntryDTO } from "@/lib/dto";
 import type {
@@ -20,6 +25,23 @@ function revalidate() {
   revalidatePath("/dashboard/strength");
   revalidatePath("/dashboard/records");
   revalidatePath("/dashboard/settings");
+}
+
+/** Propose canonical exercises for typed/imported names (read-only). */
+export async function suggestExercisesAction(
+  names: string[]
+): Promise<ActionResult<ExerciseSuggestionDTO[]>> {
+  return runAction(() => exerciseMatchService.suggest(names));
+}
+
+export async function addStarterExerciseAction(name: string): Promise<ActionResult<ExerciseDTO>> {
+  const result = await runAction(() => exerciseService.addFromStarter(name));
+  if (result.ok) revalidate();
+  return result;
+}
+
+export async function exerciseChoicesAction(): Promise<ActionResult<ExerciseChoiceDTO[]>> {
+  return runAction(() => exerciseMatchService.choices());
 }
 
 export async function createExerciseAction(

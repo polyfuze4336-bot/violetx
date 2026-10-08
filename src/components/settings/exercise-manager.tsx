@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ConfirmDeleteButton } from "@/components/dashboard/delete-button";
+import { ExerciseNameCheck, type NameDecision } from "@/components/exercises/exercise-name-check";
+import { parseExerciseRef } from "@/lib/exercise-matching";
+import type { ExerciseSuggestionDTO } from "@/lib/services/exerciseMatch";
 import {
+  addStarterExerciseAction,
+  suggestExercisesAction,
   createExerciseAction,
   deleteExerciseAction,
   updateExerciseAction,
@@ -29,12 +34,43 @@ export function ExerciseManager({ exercises }: { exercises: ExerciseDTO[] }) {
   const [equipment, setEquipment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [suggestion, setSuggestion] = useState<ExerciseSuggestionDTO | null>(null);
   const { toast } = useToast();
+
+  function reset() {
+    setName("");
+    setCategory("");
+    setMuscleGroup("");
+    setEquipment("");
+    setSuggestion(null);
+  }
+
+  function pickExisting(d: NameDecision | null) {
+    if (d?.kind !== "ref") return;
+    const ref = parseExerciseRef(d.ref);
+    startTransition(async () => {
+      if (ref?.kind === "starter") {
+        const res = await addStarterExerciseAction(ref.name);
+        if (!res.ok) return setError(res.error);
+      }
+      toast({ title: ref?.kind === "starter" ? `${d.name} added` : `Using existing ${d.name}` });
+      reset();
+    });
+  }
 
   function onAdd(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     startTransition(async () => {
+      // Saving again with a suggestion showing keeps the name as a new exercise.
+      if (!suggestion) {
+        const check = await suggestExercisesAction([name]);
+        const s = check.ok ? check.data[0] : undefined;
+        if (s && s.status !== "NONE") {
+          setSuggestion(s.status === "EXACT" ? { ...s, status: "HIGH" } : s);
+          return;
+        }
+      }
       const result = await createExerciseAction({
         name,
         category: category || undefined,
@@ -44,10 +80,7 @@ export function ExerciseManager({ exercises }: { exercises: ExerciseDTO[] }) {
       });
       if (result.ok) {
         toast({ title: "Exercise added" });
-        setName("");
-        setCategory("");
-        setMuscleGroup("");
-        setEquipment("");
+        reset();
       } else {
         setError(result.error);
       }
@@ -78,10 +111,26 @@ export function ExerciseManager({ exercises }: { exercises: ExerciseDTO[] }) {
             <label className="text-xs font-medium">Name</label>
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setSuggestion(null);
+              }}
               placeholder="Chest press"
               required
             />
+            {suggestion && (
+              <ExerciseNameCheck
+                name={name}
+                suggestion={suggestion}
+                decision={null}
+                onDecide={(d) => {
+                  if (d?.kind === "custom") {
+                    // Keep as new: createExerciseAction runs on the next submit.
+                    setSuggestion({ ...suggestion, status: "NONE" });
+                  } else pickExisting(d);
+                }}
+              />
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium">Category</label>

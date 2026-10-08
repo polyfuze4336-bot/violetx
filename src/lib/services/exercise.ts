@@ -2,7 +2,8 @@ import {
   exerciseEntryRepository,
   exerciseRepository,
 } from "@/lib/repositories/exercise";
-import { STARTER_EXERCISES, exerciseKeys } from "@/lib/exercise-library";
+import { STARTER_EXERCISES, starterCreateData } from "@/lib/exercise-library";
+import { exerciseIdentityKeys } from "@/lib/exercise-matching";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
 import {
   requireOwnerAthlete,
@@ -41,10 +42,18 @@ export const exerciseService = {
   async create(input: CreateExerciseInput): Promise<ExerciseDTO> {
     const { athleteId } = await requireOwnerAthlete();
     const data = createExerciseSchema.parse(input);
-    const existing = await exerciseRepository.findByName(athleteId, data.name);
+    // Same name or alias, ignoring case, spacing and punctuation
+    // ("Lat Pull Down" is "Lat Pulldown").
+    const wanted = new Set(exerciseIdentityKeys(data.name));
+    const library = await exerciseRepository.list(athleteId);
+    const existing = library.find((e) =>
+      exerciseIdentityKeys(e.name, e.aliases).some((k) => wanted.has(k))
+    );
     if (existing) {
       throw new AuthorizationError(
-        `An exercise called "${data.name}" already exists.`
+        existing.name.toLowerCase() === data.name.toLowerCase()
+          ? `An exercise called "${data.name}" already exists.`
+          : `"${data.name}" is the same as your existing exercise "${existing.name}".`
       );
     }
     const created = await exerciseRepository.create({
@@ -62,6 +71,22 @@ export const exerciseService = {
       active: data.active,
     });
     return toExerciseDTO(created);
+  },
+
+  /**
+   * Add one canonical starter exercise to the library (or return the existing
+   * one when its name/alias is already there). The name must be a starter name:
+   * clients cannot create arbitrary exercises through this path.
+   */
+  async addFromStarter(name: string): Promise<ExerciseDTO> {
+    const { athleteId } = await requireOwnerAthlete();
+    const starter = STARTER_EXERCISES.find((s) => s.name === name);
+    if (!starter) throw new NotFoundError("Unknown starter exercise.");
+    const keys = new Set(exerciseIdentityKeys(starter.name, starter.aliases));
+    const library = await exerciseRepository.list(athleteId);
+    const existing = library.find((e) => exerciseIdentityKeys(e.name, e.aliases).some((k) => keys.has(k)));
+    if (existing) return toExerciseDTO(existing);
+    return toExerciseDTO(await exerciseRepository.create({ athleteId, ...starterCreateData(starter) }));
   },
 
   async update(input: UpdateExerciseInput): Promise<void> {
@@ -100,38 +125,17 @@ export const exerciseService = {
     const { athleteId } = await requireOwnerAthlete();
     const existing = await exerciseRepository.list(athleteId);
     const taken = new Set(
-      existing.flatMap((e) => exerciseKeys(e.name, e.aliases))
+      existing.flatMap((e) => exerciseIdentityKeys(e.name, e.aliases))
     );
-    const category = (g: string) =>
-      g === "Biceps" || g === "Triceps"
-        ? "Arms"
-        : g === "Quads" || g === "Hamstrings" || g === "Calves"
-          ? "Legs"
-          : g === "Glutes & Hips"
-            ? "Glutes"
-            : g;
     let created = 0;
     let skipped = 0;
     for (const ex of STARTER_EXERCISES) {
-      const keys = exerciseKeys(ex.name, ex.aliases);
+      const keys = exerciseIdentityKeys(ex.name, ex.aliases);
       if (keys.some((k) => taken.has(k))) {
         skipped += 1;
         continue;
       }
-      await exerciseRepository.create({
-        athleteId,
-        name: ex.name,
-        category: category(ex.primary),
-        muscleGroup: ex.primary,
-        equipment: ex.equipment,
-        aliases: ex.aliases?.join(", ") ?? null,
-        secondaryMuscles: ex.secondary?.join(", ") ?? null,
-        movementPattern: ex.pattern,
-        instructions: ex.instructions,
-        tips: ex.tips ?? null,
-        isCustom: false,
-        active: true,
-      });
+      await exerciseRepository.create({ athleteId, ...starterCreateData(ex) });
       keys.forEach((k) => taken.add(k));
       created += 1;
     }

@@ -101,6 +101,8 @@ export interface VioletCommitInput {
   }[];
   sets: {
     exercise: string;
+    /** Confirmed exercise-name correction ("id:..." / "starter:..."), validated server-side. */
+    exerciseRef?: string;
     reps: number;
     weightKg: number;
     resolution: Resolution;
@@ -127,6 +129,7 @@ export async function violetCommitAction(
       })),
       sets: input.sets.map((s) => ({
         exercise: s.exercise,
+        exerciseRef: s.exerciseRef,
         reps: s.reps,
         weightKg: s.weightKg,
         resolution: s.resolution,

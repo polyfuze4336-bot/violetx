@@ -5,7 +5,7 @@ import { programRepository, type ProgramWithTemplates } from "@/lib/repositories
 import { requireOwnerAthlete, requireViewerAthlete } from "@/lib/services/context";
 import { derivePersonalRecords } from "@/lib/services/personalRecord";
 import { weekdayIn } from "@/lib/dates";
-import { exerciseKeys } from "@/lib/exercise-library";
+import { exerciseIdentityKeys } from "@/lib/exercise-matching";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
 import {
   parseDaysFromRequest,
@@ -98,13 +98,14 @@ function toDTO(p: ProgramWithTemplates): ProgramDTO {
 async function resolveExerciseIds(athleteId: string, program: ParsedProgram): Promise<Map<string, string>> {
   const library = await exerciseRepository.list(athleteId);
   const byKey = new Map<string, string>();
-  for (const e of library) for (const k of exerciseKeys(e.name, e.aliases)) byKey.set(k, e.id);
+  for (const e of library) for (const k of exerciseIdentityKeys(e.name, e.aliases)) byKey.set(k, e.id);
 
   const resolved = new Map<string, string>();
   for (const t of program.templates) {
     for (const ex of t.exercises) {
-      const key = ex.exerciseName.trim().toLowerCase();
-      if (resolved.has(key)) continue;
+      const lower = ex.exerciseName.trim().toLowerCase();
+      const key = exerciseIdentityKeys(ex.exerciseName)[0] ?? lower;
+      if (resolved.has(lower)) continue;
       let id = (ex.exerciseId && library.find((l) => l.id === ex.exerciseId)?.id) || byKey.get(key);
       if (!id) {
         const group = inferMuscleGroup(ex.exerciseName);
@@ -118,7 +119,7 @@ async function resolveExerciseIds(athleteId: string, program: ParsedProgram): Pr
         id = created.id;
         byKey.set(key, id);
       }
-      resolved.set(key, id);
+      resolved.set(lower, id);
     }
   }
   return resolved;

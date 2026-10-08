@@ -25,6 +25,13 @@ import {
 } from "@/lib/actions/violet";
 import { checkImportDuplicatesAction } from "@/lib/actions/import";
 import { PATIENT_LABEL } from "@/lib/constants";
+import {
+  ExerciseNameCheck,
+  decisionRef,
+  needsNameDecision,
+  useExerciseSuggestions,
+  type NameDecision,
+} from "@/components/exercises/exercise-name-check";
 import type { Resolution, Unit } from "@/lib/schemas";
 
 interface ChatMessage {
@@ -42,6 +49,7 @@ interface EMeas {
 }
 interface ESet {
   exercise: string;
+  decision: NameDecision | null;
   reps: string;
   weightKg: string;
   confidence: number;
@@ -126,6 +134,7 @@ export function VioletChat({ provider }: { provider: string }) {
       }));
       const nextSets: ESet[] = r.sets.map((s) => ({
         exercise: s.exercise,
+        decision: null,
         reps: String(s.reps),
         weightKg: String(s.weightKg),
         confidence: s.confidence,
@@ -189,6 +198,11 @@ export function VioletChat({ provider }: { provider: string }) {
     );
   }
 
+  const suggestionFor = useExerciseSuggestions(sets.map((s) => s.exercise));
+  const pendingNames = sets.filter(
+    (s) => s.resolution !== "SKIP" && needsNameDecision(suggestionFor(s.exercise), s.decision)
+  ).length;
+
   const savable =
     (weight && weight.resolution !== "SKIP" ? 1 : 0) +
     measurements.filter((m) => m.resolution !== "SKIP").length +
@@ -219,6 +233,7 @@ export function VioletChat({ provider }: { provider: string }) {
           .filter((s) => s.exercise.trim() && s.reps && s.weightKg)
           .map((s) => ({
             exercise: s.exercise.trim(),
+            exerciseRef: decisionRef(s.decision),
             reps: Number(s.reps),
             weightKg: Number(s.weightKg),
             resolution: s.resolution,
@@ -430,13 +445,23 @@ export function VioletChat({ provider }: { provider: string }) {
                     )
                   }
                   onRemove={() => setSets((p) => p.filter((_, j) => j !== i))}
+                  footer={
+                    <ExerciseNameCheck
+                      name={s.exercise}
+                      suggestion={suggestionFor(s.exercise)}
+                      decision={s.decision}
+                      onDecide={(d) =>
+                        setSets((p) => p.map((x, j) => (j === i ? { ...x, decision: d } : x)))
+                      }
+                    />
+                  }
                 >
                   <Input
                     value={s.exercise}
                     onChange={(e) =>
                       setSets((p) =>
                         p.map((x, j) =>
-                          j === i ? { ...x, exercise: e.target.value } : x
+                          j === i ? { ...x, exercise: e.target.value, decision: null } : x
                         )
                       )
                     }
@@ -473,7 +498,7 @@ export function VioletChat({ provider }: { provider: string }) {
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={saveAll}
-                  disabled={isPending || savable === 0}
+                  disabled={isPending || savable === 0 || pendingNames > 0}
                 >
                   Save {savable} {savable === 1 ? "record" : "records"}
                 </Button>
@@ -504,6 +529,7 @@ function ProposalRow({
   resolution,
   onResolution,
   onRemove,
+  footer,
   children,
 }: {
   label: string;
@@ -513,6 +539,7 @@ function ProposalRow({
   resolution: Resolution;
   onResolution: (r: Resolution) => void;
   onRemove: () => void;
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -534,6 +561,7 @@ function ProposalRow({
         </div>
       </div>
       <div className="flex items-center gap-2">{children}</div>
+      {footer && <div className="mt-1.5">{footer}</div>}
       {warn && (
         <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="h-3 w-3" /> {warn}
