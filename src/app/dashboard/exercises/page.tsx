@@ -31,6 +31,7 @@ export default async function ExercisesPage() {
   const stats: Record<string, ExerciseStats> = {};
   for (const r of prs) {
     stats[r.exerciseId] = {
+      assisted: r.assisted,
       maxWeightKg: r.maxWeightKg,
       estimatedOneRepMaxKg: r.estimatedOneRepMaxKg,
       totalSets: r.totalSets,

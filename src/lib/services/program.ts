@@ -322,6 +322,7 @@ export const programService = {
       daysPerWeek: requestedDays,
       library: library.filter((e) => e.active).map((e) => e.name).slice(0, 80),
       strength: records
+        .filter((r) => !r.assisted)
         .sort((a, b) => b.estimatedOneRepMaxKg - a.estimatedOneRepMaxKg)
         .slice(0, 8)
         .map((r) => ({ exercise: r.exerciseName.slice(0, 60), estimatedOneRepMaxKg: r.estimatedOneRepMaxKg, sessions: r.totalSets })),

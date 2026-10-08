@@ -7,16 +7,22 @@ export interface Reading {
 }
 
 import { describeProgression } from "@/lib/workout-engine";
+import { isAssistedExercise } from "@/lib/progression-type";
 
 /** Deterministic load / rep progression between an exercise's last two sessions. */
 export interface Progression {
   lift: string;
-  kind: "LOAD" | "REPS";
-  /** Load of the comparison (the new top load for LOAD, the shared load for REPS). */
+  /** ASSISTANCE = an assisted lift with LESS assistance (from/to are kg of assistance, delta = kg reduced). */
+  kind: "LOAD" | "ASSISTANCE" | "REPS";
+  /** Load of the comparison (the new top load for LOAD/ASSISTANCE, the shared load for REPS). */
   weightKg: number;
   from: number;
   to: number;
   delta: number;
+  /** Assisted lift: weightKg is assistance. */
+  assisted?: boolean;
+  /** ASSISTANCE only: reps at the old and new best assistance. */
+  reps?: { from: number; to: number };
 }
 
 /**
@@ -26,7 +32,9 @@ export interface Progression {
 export function recentProgressions(
   sets: { date: string; exerciseName: string; weightKg: number; reps: number; setType?: string | null }[],
   now: Date,
-  windowDays: number
+  windowDays: number,
+  /** Exercise names known to be assisted (from exercise metadata); the name check is the fallback. */
+  assistedLifts: Set<string> = new Set()
 ): Progression[] {
   const cutoff = now.getTime() - windowDays * 86_400_000;
   const byExercise = new Map<string, Map<string, { weightKg: number; reps: number }[]>>();
@@ -43,9 +51,32 @@ export function recentProgressions(
     if (keys.length < 2) continue;
     const [prev, last] = keys.slice(-2);
     if (new Date(`${last}T00:00:00Z`).getTime() < cutoff) continue;
-    const p = describeProgression(days.get(prev)!, days.get(last)!);
-    if (p.reps) out.push({ lift, kind: "REPS", weightKg: p.reps.weightKg, from: p.reps.from, to: p.reps.to, delta: p.reps.delta });
-    if (p.load) out.push({ lift, kind: "LOAD", weightKg: p.load.toKg, from: p.load.fromKg, to: p.load.toKg, delta: p.load.deltaKg });
+    const assisted = assistedLifts.has(lift) || isAssistedExercise({ name: lift });
+    const p = describeProgression(days.get(prev)!, days.get(last)!, assisted);
+    if (p.reps) {
+      out.push({
+        lift,
+        kind: "REPS",
+        weightKg: p.reps.weightKg,
+        from: p.reps.from,
+        to: p.reps.to,
+        delta: p.reps.delta,
+        ...(assisted ? { assisted: true } : {}),
+      });
+    }
+    if (p.load) {
+      out.push({
+        lift,
+        kind: assisted ? "ASSISTANCE" : "LOAD",
+        weightKg: p.load.toKg,
+        from: p.load.fromKg,
+        to: p.load.toKg,
+        delta: p.load.deltaKg,
+        ...(assisted
+          ? { assisted: true, ...(p.load.topReps ? { reps: { from: p.load.topReps.from, to: p.load.topReps.to } } : {}) }
+          : {}),
+      });
+    }
   }
   return out;
 }
@@ -165,16 +196,28 @@ const signed = (n: number, unit = "") =>
 
 /** "Bench Press: 8 → 10 reps at 80 kg" / "Bench Press: 77.5 → 80 kg (+2.5 kg)". */
 export function progressionText(p: Progression): string {
-  return p.kind === "REPS"
-    ? `${p.lift}: ${p.from} → ${p.to} reps at ${p.weightKg} kg`
-    : `${p.lift}: ${p.from} → ${p.to} kg (+${p.delta} kg)`;
+  if (p.kind === "REPS") return `${p.lift}: ${p.from} → ${p.to} reps at ${p.weightKg} kg${p.assisted ? " assistance" : ""}`;
+  if (p.kind === "ASSISTANCE") {
+    return `${p.lift}: assistance ${p.from} → ${p.to} kg (${p.delta} kg less assistance)`;
+  }
+  return `${p.lift}: ${p.from} → ${p.to} kg (+${p.delta} kg)`;
 }
 
 /** Sentence form used when answering strength questions. */
 export function progressionSentence(p: Progression): string {
-  return p.kind === "REPS"
-    ? `Your ${p.lift.toLowerCase()} improved from ${p.from} to ${p.to} reps at ${p.weightKg} kg.`
-    : `Your ${p.lift.toLowerCase()} load went from ${p.from} to ${p.to} kg (+${p.delta} kg).`;
+  const lift = p.lift.toLowerCase();
+  if (p.kind === "REPS") {
+    return `Your ${lift} improved from ${p.from} to ${p.to} reps at ${p.weightKg} kg${p.assisted ? " assistance" : ""}.`;
+  }
+  if (p.kind === "ASSISTANCE") {
+    const base = `Your ${lift} improved from ${p.from} kg assistance to ${p.to} kg assistance`;
+    if (!p.reps) return `${base}.`;
+    if (p.reps.to === p.reps.from) return `${base} while maintaining ${p.reps.to} reps.`;
+    return p.reps.to > p.reps.from
+      ? `${base} and reps rose from ${p.reps.from} to ${p.reps.to}.`
+      : `${base}, with reps going from ${p.reps.from} to ${p.reps.to}.`;
+  }
+  return `Your ${lift} load went from ${p.from} to ${p.to} kg (+${p.delta} kg).`;
 }
 
 export interface Summary {

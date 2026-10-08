@@ -21,7 +21,8 @@ export default async function ExerciseDetailPage({
   const detail = await exerciseDetailService.get(params.id);
   if (!detail) notFound();
 
-  const { exercise, currentBest } = detail;
+  const { exercise, currentBest, assisted } = detail;
+  const unit = assisted ? "kg assistance" : "kg";
 
   const meta = [exercise.category, exercise.muscleGroup, exercise.equipment]
     .filter(Boolean)
@@ -56,18 +57,19 @@ export default async function ExerciseDetailPage({
               Current best
             </p>
             <p className="text-3xl font-bold tabular-nums">
-              {currentBest.weightKg} kg × {currentBest.reps}
+              {currentBest.weightKg} {unit} × {currentBest.reps}
             </p>
+            {assisted && <p className="text-xs text-muted-foreground">Lowest assistance · lower = stronger</p>}
           </div>
         )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatTile
-          label="Maximum weight"
+          label={assisted ? "Lowest assistance" : "Maximum weight"}
           value={
             detail.maxWeight
-              ? `${detail.maxWeight.weightKg} kg × ${detail.maxWeight.reps}`
+              ? `${detail.maxWeight.weightKg} ${unit} × ${detail.maxWeight.reps}`
               : "—"
           }
           sub={detail.maxWeight ? formatDate(detail.maxWeight.date) : undefined}
@@ -76,21 +78,23 @@ export default async function ExerciseDetailPage({
           label="Maximum reps"
           value={
             detail.maxReps
-              ? `${detail.maxReps.reps} × ${detail.maxReps.weightKg} kg`
+              ? `${detail.maxReps.reps} × ${detail.maxReps.weightKg} ${unit}`
               : "—"
           }
           sub={detail.maxReps ? formatDate(detail.maxReps.date) : undefined}
         />
-        <StatTile
-          label="Estimated strength"
-          value={
-            detail.maxEstStrength ? `${detail.maxEstStrength.value} kg` : "—"
-          }
-          sub="Analytical (Epley) — not an actual 1RM"
-          accent
-        />
-        <StatTile label="Latest performance" perf={detail.latest} />
-        <StatTile label="Best performance" perf={detail.best} />
+        {!assisted && (
+          <StatTile
+            label="Estimated strength"
+            value={
+              detail.maxEstStrength ? `${detail.maxEstStrength.value} kg` : "—"
+            }
+            sub="Analytical (Epley) — not an actual 1RM"
+            accent
+          />
+        )}
+        <StatTile label="Latest performance" perf={detail.latest} unit={unit} />
+        <StatTile label="Best performance" perf={detail.best} unit={unit} />
         <StatTile
           label="Total sessions"
           value={String(detail.totalSessions)}
@@ -102,23 +106,34 @@ export default async function ExerciseDetailPage({
         <Card className="grid gap-3 p-5 sm:grid-cols-2">
           {detail.latestProgression.load && (
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Load progression</p>
-              <p className="text-xl font-bold tabular-nums">
-                {detail.latestProgression.load.fromKg} → {detail.latestProgression.load.toKg} kg
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                {assisted ? "Assistance progression" : "Load progression"}
               </p>
-              <p className="text-sm font-semibold text-success">↑ {detail.latestProgression.load.deltaKg} kg</p>
+              <p className="text-xl font-bold tabular-nums">
+                {detail.latestProgression.load.fromKg} → {detail.latestProgression.load.toKg} {unit}
+              </p>
+              <p className="text-sm font-semibold text-success">
+                {assisted
+                  ? `↓ ${detail.latestProgression.load.deltaKg} kg less assistance`
+                  : `↑ ${detail.latestProgression.load.deltaKg} kg`}
+              </p>
+              {detail.latestProgression.load.topReps && (
+                <p className="text-sm font-semibold text-success">
+                  ↑ {detail.latestProgression.load.topReps.delta} rep{detail.latestProgression.load.topReps.delta === 1 ? "" : "s"} ({detail.latestProgression.load.topReps.from} → {detail.latestProgression.load.topReps.to})
+                </p>
+              )}
             </div>
           )}
           {detail.latestProgression.reps && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Rep progression @ {detail.latestProgression.reps.weightKg} kg
+                Rep progression @ {detail.latestProgression.reps.weightKg} {unit}
               </p>
               <p className="text-xl font-bold tabular-nums">
                 {detail.latestProgression.reps.from} → {detail.latestProgression.reps.to} reps
               </p>
               <p className="text-sm font-semibold text-success">
-                ↑ {detail.latestProgression.reps.delta} rep{detail.latestProgression.reps.delta === 1 ? "" : "s"} at {detail.latestProgression.reps.weightKg} kg
+                ↑ {detail.latestProgression.reps.delta} rep{detail.latestProgression.reps.delta === 1 ? "" : "s"} at {detail.latestProgression.reps.weightKg} {unit}
               </p>
             </div>
           )}
@@ -128,6 +143,7 @@ export default async function ExerciseDetailPage({
       <ExerciseProgression
         progression={detail.progression}
         history={detail.history}
+        assisted={detail.assisted}
       />
 
       {(exercise.instructions || exercise.tips || exercise.aliases || exercise.secondaryMuscles) && (
@@ -163,15 +179,17 @@ function StatTile({
   sub,
   perf,
   accent = false,
+  unit = "kg",
 }: {
   label: string;
   value?: string;
   sub?: string;
   perf?: PerformanceRef | null;
   accent?: boolean;
+  unit?: string;
 }) {
   const display = perf
-    ? `${perf.weightKg} kg × ${perf.reps}`
+    ? `${perf.weightKg} ${unit} × ${perf.reps}`
     : value ?? "—";
   const subtitle = perf ? formatDate(perf.date) : sub;
   return (

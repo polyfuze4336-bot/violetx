@@ -29,7 +29,7 @@ Uses vibration, a short beep and (optionally) browser notifications; the workout
 **PR detection** (against sets from *earlier* sessions; first-ever performance is a baseline, not a PR;
 warm-ups never count):
 * *Weight PR* — heavier than any previous working set.
-* *Rep PR* — more reps than ever at that weight or heavier.
+* *Rep PR* — most reps ever at the *same* load (a new load is a reference point, not a record).
 * *Estimated 1RM PR* — Epley `w × (1 + reps/30)` beats the previous best (an estimate, never an actual 1RM).
 * *Volume PR* — this session's volume for the exercise beats any previous session.
 
@@ -42,6 +42,14 @@ warm-ups never count):
 * No history → baseline guidance (pick a weight with ~2 reps in reserve).
 
 Suggestions are *guidance from logged data*, never a guarantee of safety.
+
+**Assisted exercises** (`src/lib/progression-type.ts`): an exercise is `ASSISTED` when its equipment is
+*Assisted Machine* (or, for imported free-text names, its name says "assisted"); otherwise `WEIGHTED`. No schema
+change is involved. For assisted lifts the logged weight is *assistance*, so **less assistance = progress**:
+* *Assistance PR* replaces the Weight PR ("5 kg less assistance (30 → 25 kg)"); a Rep PR still means more reps at
+  the same assistance. Estimated 1RM and volume are not computed.
+* Suggestions add reps first, then lower the assistance. Charts label "Lower assistance = stronger" and flip the axis.
+* Violet receives `ASSISTANCE` progressions ("improved from 40 kg assistance to 25 kg assistance while maintaining 8 reps").
 
 ## Programs (`/dashboard/programs`)
 Create, edit, duplicate, archive, set active; presets (PPL, Upper/Lower, Full body); start any day directly.

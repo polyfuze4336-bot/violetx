@@ -12,6 +12,7 @@ import { nutritionService } from "@/lib/services/nutrition";
 import { requireOwnerAthlete } from "@/lib/services/context";
 import { todayIso } from "@/lib/dates";
 import { toNumber } from "@/lib/dto";
+import { isAssistedExercise } from "@/lib/progression-type";
 import {
   answerFromSnapshot,
   buildInsightSnapshot,
@@ -68,7 +69,8 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
         setType: e.setType,
       })),
       now,
-      windowDays
+      windowDays,
+      new Set(entries.filter((e) => isAssistedExercise(e.exercise)).map((e) => e.exercise?.name ?? ""))
     ),
     nutrition: nutrition.map((n) => ({ date: n.entryDate, calories: n.calories, protein: n.protein, water: n.water })),
     goals: goals.map((g) => ({

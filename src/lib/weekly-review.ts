@@ -1,7 +1,7 @@
 // Pure weekly review builder. Everything shown is derived from recorded data
 // for the Monday–Sunday week; recommendations are proposals, never actions.
 
-import { resolveMuscleGroup, type TrainingSet } from "@/lib/training-analytics";
+import { resolveMuscleGroup, rowVolumeKg, type TrainingSet } from "@/lib/training-analytics";
 
 const DAY_MS = 86_400_000;
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -20,7 +20,7 @@ export interface ReviewSet extends TrainingSet {
 export interface ReviewInput {
   weekStart: string;
   sets: ReviewSet[];
-  prs: { date: string; exerciseName: string; type: "WEIGHT" | "REPS"; weightKg: number; reps: number; prevWeightKg: number | null; prevReps?: number | null }[];
+  prs: { date: string; exerciseName: string; type: "WEIGHT" | "ASSISTANCE" | "REPS"; weightKg: number; reps: number; prevWeightKg: number | null; prevReps?: number | null; assisted?: boolean }[];
   weights: { date: string; value: number }[];
   waistCm: { date: string; value: number }[];
   checkIns: { date: string; score: number }[];
@@ -52,7 +52,7 @@ function weekSets(sets: ReviewSet[], start: string) {
 }
 
 const rowSets = (s: TrainingSet) => (s.sets && s.sets > 0 ? s.sets : 1);
-const volume = (rows: TrainingSet[]) => rows.reduce((a, s) => a + s.reps * s.weightKg * rowSets(s), 0);
+const volume = (rows: TrainingSet[]) => rows.reduce((a, s) => a + rowVolumeKg(s, rowSets(s)), 0);
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 function regionSets(rows: TrainingSet[], names: string[]): number {
@@ -77,12 +77,16 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
   const strengthPrs = prs.map((p) => ({
     exerciseName: p.exerciseName,
     label:
-      p.type === "WEIGHT"
+      p.type === "ASSISTANCE"
+        ? p.prevWeightKg !== null
+          ? `${round1(p.prevWeightKg - p.weightKg)} kg less assistance (${p.prevWeightKg} → ${p.weightKg} kg × ${p.reps})`
+          : `${p.weightKg} kg assistance × ${p.reps}`
+        : p.type === "WEIGHT"
         ? p.prevWeightKg !== null
           ? `+${round1(p.weightKg - p.prevWeightKg)} kg (${p.weightKg} kg × ${p.reps})`
           : `${p.weightKg} kg × ${p.reps}`
         : p.prevReps != null
-          ? `+${p.reps - p.prevReps} rep${p.reps - p.prevReps === 1 ? "" : "s"} at ${p.weightKg} kg (${p.prevReps} → ${p.reps})`
+          ? `+${p.reps - p.prevReps} rep${p.reps - p.prevReps === 1 ? "" : "s"} at ${p.weightKg} kg${p.assisted ? " assistance" : ""} (${p.prevReps} → ${p.reps})`
           : `${p.reps} reps at ${p.weightKg} kg`,
   }));
 
@@ -139,7 +143,7 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
   if (planned > 0) next.push(`Aim for ${planned} sessions`);
   else if (workouts > 0) next.push(`Maintain ${Math.max(workouts, 3)} sessions`);
   else next.push("Schedule 3 sessions to get back into rhythm");
-  const progressed = Array.from(new Set(prs.filter((p) => p.type === "WEIGHT").map((p) => p.exerciseName)));
+  const progressed = Array.from(new Set(prs.filter((p) => p.type !== "REPS").map((p) => p.exerciseName)));
   if (progressed.length > 0) next.push(`Consider progression on ${progressed.slice(0, 2).join(" and ")}`);
   if (lowerFlat || (upperNow > 0 && lowerNow < upperNow * 0.6)) next.push("Monitor lower-body volume");
   const readiness = avg(scores);

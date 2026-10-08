@@ -3,6 +3,8 @@
 // strings; all bucketing uses the UTC calendar date (entries are stored as the
 // athlete's calendar day at UTC midnight).
 
+import { isAssistedExercise } from "@/lib/progression-type";
+
 export type Period = "week" | "month";
 
 export interface TrainingSet {
@@ -15,6 +17,8 @@ export interface TrainingSet {
   weightKg: number;
   /** Number of sets this row represents (null = 1). */
   sets: number | null;
+  /** Assisted exercise (weight = assistance, lower is better); derived from the name if omitted. */
+  assisted?: boolean;
 }
 
 export const MUSCLE_GROUPS = [
@@ -175,7 +179,7 @@ export function summarizePeriods(
     p.days.add(day);
     p.sets += n;
     p.reps += r.reps * n;
-    p.volumeKg += r.reps * r.weightKg * n;
+    p.volumeKg += rowVolumeKg(r, n);
     p.setsByMuscle[muscle] = (p.setsByMuscle[muscle] ?? 0) + n;
   }
 
@@ -200,6 +204,8 @@ export interface ExerciseProgress {
   muscleGroup: MuscleGroup;
   sessions: number;
   totalSets: number;
+  /** Assisted exercise: estimated strength is not meaningful (0) and status uses assistance. */
+  assisted: boolean;
   firstE1rm: number;
   latestE1rm: number;
   bestE1rm: number;
@@ -223,11 +229,18 @@ export function summarizeExercises(
 
   const out: ExerciseProgress[] = [];
   for (const [exerciseId, list] of Array.from(byExercise.entries())) {
+    const assisted = rowAssisted(list[0]);
     const perDay = new Map<string, number>();
+    // Assisted lifts: lowest assistance per day (and the reps done at it).
+    const perDayAssist = new Map<string, { kg: number; reps: number }>();
     let totalSets = 0;
     for (const r of list) {
       const day = isoDay(r.date);
       perDay.set(day, Math.max(perDay.get(day) ?? 0, epley(r.weightKg, r.reps)));
+      const a = perDayAssist.get(day);
+      if (!a || r.weightKg < a.kg || (r.weightKg === a.kg && r.reps > a.reps)) {
+        perDayAssist.set(day, { kg: r.weightKg, reps: r.reps });
+      }
       totalSets += rowSets(r);
     }
     const days = Array.from(perDay.keys()).sort();
@@ -241,6 +254,18 @@ export function summarizeExercises(
     const idleDays = (now.getTime() - toUtc(lastPerformed).getTime()) / DAY_MS;
     if (idleDays > 21) {
       status = "inactive";
+    } else if (assisted && values.length >= 4) {
+      const bests = days.map((d) => perDayAssist.get(d)!);
+      const kg = (xs: { kg: number }[]) => Math.min(...xs.map((x) => x.kg));
+      const recent = bests.slice(-3);
+      const prior = bests.slice(0, -3);
+      if (kg(recent) < kg(prior) - 0.01) status = "progressing";
+      else if (kg(recent) > kg(prior) * 1.05 + 0.01) status = "regressing";
+      else {
+        const repsAt = (xs: { kg: number; reps: number }[]) =>
+          Math.max(...xs.filter((x) => x.kg === kg(xs)).map((x) => x.reps));
+        status = kg(recent) === kg(prior) && repsAt(recent) > repsAt(prior) ? "progressing" : "stalled";
+      }
     } else if (values.length >= 4) {
       const recent = Math.max(...values.slice(-3));
       const prior = Math.max(...values.slice(0, -3));
@@ -255,10 +280,11 @@ export function summarizeExercises(
       muscleGroup: resolveMuscleGroup(list[0].exerciseName, list[0].muscleGroup),
       sessions: days.length,
       totalSets,
-      firstE1rm: round1(first),
-      latestE1rm: round1(latest),
-      bestE1rm: round1(best),
-      changePct: days.length > 1 && first > 0 ? round1(((latest - first) / first) * 100) : null,
+      assisted,
+      firstE1rm: assisted ? 0 : round1(first),
+      latestE1rm: assisted ? 0 : round1(latest),
+      bestE1rm: assisted ? 0 : round1(best),
+      changePct: !assisted && days.length > 1 && first > 0 ? round1(((latest - first) / first) * 100) : null,
       lastPerformed,
       status,
     });
@@ -279,20 +305,36 @@ export interface ExerciseSeries {
   exerciseId: string;
   name: string;
   muscleGroup: MuscleGroup;
+  /** Assisted exercise: maxWeightKg is the LOWEST assistance and e1rm is 0. */
+  assisted: boolean;
   points: ExerciseSeriesPoint[];
 }
 
-/** Heaviest set and best estimated strength per training day, per exercise. */
+export const rowAssisted = (r: TrainingSet) => r.assisted ?? isAssistedExercise({ name: r.exerciseName });
+
+/** Tonnage of a row. Assisted lifts have no tonnage: the weight is assistance. */
+export const rowVolumeKg = (r: TrainingSet, sets: number) =>
+  rowAssisted(r) ? 0 : r.reps * r.weightKg * sets;
+
+/**
+ * Heaviest set and best estimated strength per training day, per exercise. For
+ * assisted lifts the best set is the lowest assistance (no estimated strength).
+ */
 export function buildExerciseSeries(rows: TrainingSet[]): ExerciseSeries[] {
-  const byExercise = new Map<string, { name: string; muscle: MuscleGroup; days: Map<string, ExerciseSeriesPoint> }>();
+  const byExercise = new Map<
+    string,
+    { name: string; muscle: MuscleGroup; assisted: boolean; days: Map<string, ExerciseSeriesPoint> }
+  >();
   for (const r of rows) {
     const day = isoDay(r.date);
+    const assisted = rowAssisted(r);
     const entry =
       byExercise.get(r.exerciseId) ??
-      { name: r.exerciseName, muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup), days: new Map() };
-    const p = entry.days.get(day) ?? { date: day, maxWeightKg: 0, e1rm: 0 };
-    p.maxWeightKg = Math.max(p.maxWeightKg, r.weightKg);
-    p.e1rm = Math.max(p.e1rm, round1(epley(r.weightKg, r.reps)));
+      { name: r.exerciseName, muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup), assisted, days: new Map() };
+    const existing = entry.days.get(day);
+    const p = existing ?? { date: day, maxWeightKg: r.weightKg, e1rm: 0 };
+    p.maxWeightKg = assisted ? Math.min(p.maxWeightKg, r.weightKg) : Math.max(existing ? p.maxWeightKg : 0, r.weightKg);
+    if (!assisted) p.e1rm = Math.max(p.e1rm, round1(epley(r.weightKg, r.reps)));
     entry.days.set(day, p);
     byExercise.set(r.exerciseId, entry);
   }
@@ -301,6 +343,7 @@ export function buildExerciseSeries(rows: TrainingSet[]): ExerciseSeries[] {
       exerciseId,
       name: v.name,
       muscleGroup: v.muscle,
+      assisted: v.assisted,
       points: Array.from(v.days.values()).sort((a, b) => a.date.localeCompare(b.date)),
     }))
     .sort((a, b) => b.points.length - a.points.length);
@@ -345,8 +388,6 @@ export interface ProgressMatrix {
   rows: MatrixRow[];
 }
 
-const isAssisted = (name: string) => /assist/i.test(name);
-
 /**
  * Best set (heaviest, then most reps) per exercise per period for the last
  * `count` periods, with PR markers and an overall trend per exercise.
@@ -362,14 +403,23 @@ export function buildProgressMatrix(
   for (let i = count - 1; i >= 0; i--) keys.push(addPeriods(currentStart, period, -i));
   const index = new Map(keys.map((k, i) => [k, i]));
 
-  const byExercise = new Map<string, { name: string; muscle: MuscleGroup; best: ({ weightKg: number; reps: number } | null)[]; sets: number }>();
+  const byExercise = new Map<
+    string,
+    { name: string; muscle: MuscleGroup; assisted: boolean; best: ({ weightKg: number; reps: number } | null)[]; sets: number }
+  >();
   for (const r of rows) {
     const col = index.get(periodStart(isoDay(r.date), period));
     if (col === undefined) continue;
     const entry =
       byExercise.get(r.exerciseId) ??
-      { name: r.exerciseName, muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup), best: keys.map(() => null), sets: 0 };
-    const assisted = isAssisted(r.exerciseName);
+      {
+        name: r.exerciseName,
+        muscle: resolveMuscleGroup(r.exerciseName, r.muscleGroup),
+        assisted: rowAssisted(r),
+        best: keys.map(() => null),
+        sets: 0,
+      };
+    const assisted = entry.assisted;
     const cur = entry.best[col];
     // Assisted lifts: less assistance is better.
     const better =
@@ -385,7 +435,7 @@ export function buildProgressMatrix(
   const columnPrs = keys.map(() => 0);
   const out: MatrixRow[] = [];
   for (const [exerciseId, e] of Array.from(byExercise.entries())) {
-    const assisted = isAssisted(e.name);
+    const assisted = e.assisted;
     const filled = e.best.map((b, i) => (b ? i : -1)).filter((i) => i >= 0);
     if (filled.length === 0) continue;
 
@@ -660,7 +710,9 @@ export function buildRuleBasedTips(input: {
       category: "progression",
       priority: 1,
       title: `${e.name}: break the plateau`,
-      detail: `Estimated strength has not improved over the last 3 sessions (${e.latestE1rm} kg est. vs ${e.bestE1rm} kg best). Use double progression: stay at the same weight until you hit the top of your rep range (e.g. 12) on all sets, then add 2.5–5% load and drop back to ~8 reps. Check sleep, protein and total weekly sets too.`,
+      detail: e.assisted
+        ? "Assistance has not come down over the last 3 sessions. Use double progression: keep the same assistance until you hit the top of your rep range (e.g. 12) on all sets, then reduce the assistance by 2.5–5 kg and drop back to ~8 reps. Lower assistance = stronger. Check sleep, protein and total weekly sets too."
+        : `Estimated strength has not improved over the last 3 sessions (${e.latestE1rm} kg est. vs ${e.bestE1rm} kg best). Use double progression: stay at the same weight until you hit the top of your rep range (e.g. 12) on all sets, then add 2.5–5% load and drop back to ~8 reps. Check sleep, protein and total weekly sets too.`,
     });
   }
 

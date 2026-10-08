@@ -27,6 +27,7 @@ import {
   type UpdateSetInput,
 } from "@/lib/workout-schemas";
 import { resolveMuscleGroup } from "@/lib/training-analytics";
+import { isAssistedExercise } from "@/lib/progression-type";
 
 export interface ActiveSetDTO {
   id: string;
@@ -43,6 +44,8 @@ export interface ActiveExerciseDTO {
   name: string;
   muscleGroup: string;
   equipment: string | null;
+  /** Assisted exercise: weights are assistance, so LESS is progress. */
+  assisted: boolean;
   notes: string | null;
   skipped: boolean;
   supersetGroup: number | null;
@@ -138,13 +141,15 @@ async function buildActiveView(
     session.exercises.map(async (we): Promise<ActiveExerciseDTO> => {
       const all = (await workoutRepository.exerciseHistory(athleteId, we.exerciseId)).map(toLogged);
       const prior = all.filter((s) => s.sessionId !== session.id);
-      const lastSession = summarizeSessions(prior)[0];
+      const assisted = isAssistedExercise(we.exercise);
+      const lastSession = summarizeSessions(prior, assisted)[0];
       return {
         id: we.id,
         exerciseId: we.exerciseId,
         name: we.exercise.name,
         muscleGroup: resolveMuscleGroup(we.exercise.name, we.exercise.muscleGroup),
         equipment: we.exercise.equipment,
+        assisted,
         notes: we.notes,
         skipped: we.skipped,
         supersetGroup: we.supersetGroup,
@@ -161,10 +166,10 @@ async function buildActiveView(
           : null,
         suggestion: suggestProgression(
           prior,
-          we.repMin && we.repMax ? { repMin: we.repMin, repMax: we.repMax } : {}
+          { ...(we.repMin && we.repMax ? { repMin: we.repMin, repMax: we.repMax } : {}), assisted }
         ),
         bests: (() => {
-          const b = exerciseBests(prior);
+          const b = exerciseBests(prior, assisted);
           return { maxWeightKg: b.maxWeightKg, maxE1rm: b.maxE1rm };
         })(),
       };
@@ -192,7 +197,12 @@ export async function listWorkoutsFor(athleteId: string, take = 30): Promise<Wor
       status: s.status,
       durationMin: durationMin(s.startedAt, s.endedAt),
       sets: work.length,
-      volumeKg: Math.round(work.reduce((a, e) => a + setVolume({ weightKg: toNumber(e.weightKg), reps: e.reps }), 0)),
+      volumeKg: Math.round(
+        work.reduce(
+          (a, e) => (isAssistedExercise(e.exercise) ? a : a + setVolume({ weightKg: toNumber(e.weightKg), reps: e.reps })),
+          0
+        )
+      ),
       exercises: Array.from(new Set(s.entries.map((e) => e.exercise.name))),
       gym: s.gymBranch?.name ?? null,
       sessionRpe: s.sessionRpe,
@@ -368,6 +378,7 @@ export const workoutService = {
       set: { weightKg: data.weightKg, reps: data.reps, setType: data.setType },
       priorHistory,
       sessionSetsSoFar,
+      assisted: isAssistedExercise(we.exercise),
     });
     return { set: toSetDTO(created), prs };
   },
@@ -447,11 +458,14 @@ export const workoutService = {
       const priorHistory = all.filter((s) => s.sessionId !== session.id);
       const soFar: { weightKg: number; reps: number; setType: string }[] = [];
       const found = new Map<string, PrAchievement>();
+      const assisted = isAssistedExercise(we.exercise);
       for (const s of we.sets) {
         const w = { weightKg: toNumber(s.weightKg), reps: s.reps, setType: s.setType };
-        for (const a of detectSetPrs({ set: w, priorHistory, sessionSetsSoFar: soFar })) {
+        for (const a of detectSetPrs({ set: w, priorHistory, sessionSetsSoFar: soFar, assisted })) {
           const cur = found.get(a.type);
-          if (!cur || a.value > cur.value) found.set(a.type, a);
+          // Lower assistance is the better ASSISTANCE PR.
+          const better = a.type === "ASSISTANCE" ? !cur || a.value < cur.value : !cur || a.value > cur.value;
+          if (better) found.set(a.type, a);
         }
         soFar.push(w);
       }
@@ -464,7 +478,16 @@ export const workoutService = {
       discarded: false,
       durationMin: durationMin(session.startedAt, endedAt),
       totalSets: working.length,
-      totalVolumeKg: Math.round(working.reduce((a, s) => a + setVolume({ weightKg: toNumber(s.weightKg), reps: s.reps }), 0)),
+      totalVolumeKg: Math.round(
+        session.exercises.reduce(
+          (total, we) =>
+            isAssistedExercise(we.exercise)
+              ? total
+              : total +
+                workingSets(we.sets).reduce((a, s) => a + setVolume({ weightKg: toNumber(s.weightKg), reps: s.reps }), 0),
+          0
+        )
+      ),
       exerciseCount: session.exercises.filter((e) => e.sets.length > 0).length,
       prs,
     };

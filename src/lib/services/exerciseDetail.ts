@@ -5,6 +5,7 @@ import {
 import { requireViewerAthlete } from "@/lib/services/context";
 import { toExerciseDTO, toNumber, type ExerciseDTO } from "@/lib/dto";
 import { describeProgression, type ProgressionSummary } from "@/lib/workout-engine";
+import { isAssistedExercise, isBetterLoad } from "@/lib/progression-type";
 
 /** Epley estimated one-rep max: weight * (1 + reps / 30). Analytical only. */
 export function estimatedStrength(weightKg: number, reps: number): number {
@@ -41,6 +42,11 @@ export interface LatestProgression extends ProgressionSummary {
 
 export interface ExerciseDetailDTO {
   exercise: ExerciseDTO;
+  /**
+   * Assisted exercise: weights are assistance, so "max weight" is the LOWEST
+   * assistance, estimated strength is not computed and charts read "lower = stronger".
+   */
+  assisted: boolean;
   /** Last session vs the one before it: load and rep progression. */
   latestProgression: LatestProgression | null;
   currentBest: { weightKg: number; reps: number } | null;
@@ -66,8 +72,10 @@ export const exerciseDetailService = {
       exerciseId
     );
 
+    const assisted = isAssistedExercise(exercise);
     const detail: ExerciseDetailDTO = {
       exercise: toExerciseDTO(exercise),
+      assisted,
       latestProgression: null,
       currentBest: null,
       maxWeight: null,
@@ -93,7 +101,7 @@ export const exerciseDetailService = {
       const weightKg = toNumber(e.weightKg);
       const reps = e.reps;
       const iso = e.date.toISOString();
-      const est = estimatedStrength(weightKg, reps);
+      const est = assisted ? 0 : estimatedStrength(weightKg, reps);
 
       detail.history.push({
         id: e.id,
@@ -104,10 +112,10 @@ export const exerciseDetailService = {
         source: e.source,
       });
 
-      // Max weight (heaviest; tie -> more reps).
+      // Max weight (heaviest, or lowest assistance; tie -> more reps).
       if (
         !detail.maxWeight ||
-        weightKg > detail.maxWeight.weightKg ||
+        isBetterLoad(weightKg, detail.maxWeight.weightKg, assisted) ||
         (weightKg === detail.maxWeight.weightKg &&
           reps > detail.maxWeight.reps)
       ) {
@@ -117,23 +125,23 @@ export const exerciseDetailService = {
       if (
         !detail.maxReps ||
         reps > detail.maxReps.reps ||
-        (reps === detail.maxReps.reps && weightKg > detail.maxReps.weightKg)
+        (reps === detail.maxReps.reps && isBetterLoad(weightKg, detail.maxReps.weightKg, assisted))
       ) {
         detail.maxReps = { reps, weightKg, date: iso };
       }
       // Highest estimated strength.
-      if (!detail.maxEstStrength || est > detail.maxEstStrength.value) {
+      if (!assisted && (!detail.maxEstStrength || est > detail.maxEstStrength.value)) {
         detail.maxEstStrength = { value: est, weightKg, reps, date: iso };
       }
 
       const day = iso.slice(0, 10);
       const agg = byDay.get(day) ?? {
         date: iso,
-        topWeight: 0,
+        topWeight: weightKg,
         maxReps: 0,
         estStrength: 0,
       };
-      agg.topWeight = Math.max(agg.topWeight, weightKg);
+      agg.topWeight = assisted ? Math.min(agg.topWeight, weightKg) : Math.max(agg.topWeight, weightKg);
       agg.maxReps = Math.max(agg.maxReps, reps);
       agg.estStrength = Math.max(agg.estStrength, est);
       byDay.set(day, agg);
@@ -171,7 +179,7 @@ export const exerciseDetailService = {
     const dayKeys = Array.from(days.keys()).sort();
     if (dayKeys.length >= 2) {
       const [fromDate, toDate] = dayKeys.slice(-2);
-      const p = describeProgression(days.get(fromDate)!, days.get(toDate)!);
+      const p = describeProgression(days.get(fromDate)!, days.get(toDate)!, assisted);
       if (p.load || p.reps) detail.latestProgression = { ...p, fromDate, toDate };
     }
 

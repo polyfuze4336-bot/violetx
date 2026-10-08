@@ -30,6 +30,8 @@ import { MUSCLE_GROUPS } from "@/lib/training-analytics";
 import type { ExerciseDTO } from "@/lib/dto";
 
 export interface ExerciseStats {
+  /** Assisted: maxWeightKg is the lowest assistance and there is no 1RM estimate. */
+  assisted?: boolean;
   maxWeightKg: number;
   estimatedOneRepMaxKg: number;
   totalSets: number;
@@ -272,10 +274,10 @@ export function ExerciseLibrary({
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                       <div>
                         <p className="text-lg font-bold tabular-nums">{s.maxWeightKg}</p>
-                        <p className="text-[10px] uppercase text-muted-foreground">Best kg</p>
+                        <p className="text-[10px] uppercase text-muted-foreground">{s.assisted ? "Least assist kg" : "Best kg"}</p>
                       </div>
                       <div>
-                        <p className="text-lg font-bold tabular-nums text-magenta">{s.estimatedOneRepMaxKg}</p>
+                        <p className="text-lg font-bold tabular-nums text-magenta">{s.assisted ? "—" : s.estimatedOneRepMaxKg}</p>
                         <p className="text-[10px] uppercase text-muted-foreground">Est. 1RM</p>
                       </div>
                       <div>

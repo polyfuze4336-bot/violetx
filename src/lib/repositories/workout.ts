@@ -52,7 +52,7 @@ export const workoutRepository = {
   getWorkoutExercise(athleteId: string, id: string) {
     return prisma.workoutExercise.findFirst({
       where: { id, athleteId },
-      include: { session: true, sets: true },
+      include: { session: true, sets: true, exercise: true },
     });
   },
 
@@ -131,7 +131,7 @@ export const workoutRepository = {
       take,
       include: {
         gymBranch: { select: { id: true, name: true } },
-        entries: { include: { exercise: { select: { name: true } } } },
+        entries: { include: { exercise: { select: { name: true, equipment: true } } } },
       },
     });
   },

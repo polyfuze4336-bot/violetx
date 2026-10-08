@@ -180,7 +180,7 @@ export async function HomeHero({ isOwner }: { isOwner: boolean }) {
             <>
               <p className="font-semibold">{pr.exerciseName}</p>
               <p className="text-2xl font-bold tabular-nums">
-                {formatNumber(pr.weightKg)} kg × {pr.reps}
+                {formatNumber(pr.weightKg)} kg{pr.assisted ? " assistance" : ""} × {pr.reps}
               </p>
               <p className="text-xs font-semibold text-primary">
                 {prEventDetail(pr).label} · {prEventDetail(pr).detail}

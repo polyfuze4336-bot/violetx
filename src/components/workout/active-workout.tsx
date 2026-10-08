@@ -184,7 +184,7 @@ function ExerciseCard({
         weightKg: w,
         reps: r,
         achievements: res.data.prs,
-        estimatedOneRepMaxKg: Math.round(epley(w, r) * 10) / 10,
+        estimatedOneRepMaxKg: ex.assisted ? 0 : Math.round(epley(w, r) * 10) / 10,
       });
     }
   }
@@ -221,14 +221,16 @@ function ExerciseCard({
     } else toast({ title: "Could not save note", description: res.error, variant: "destructive" });
   }
 
+  const unit = ex.assisted ? "kg assist" : "kg";
   const target =
     ex.suggestion.weightKg !== null
-      ? `${ex.suggestion.weightKg} kg × ${ex.suggestion.repMin}–${ex.suggestion.repMax}`
+      ? `${ex.suggestion.weightKg} ${unit} × ${ex.suggestion.repMin}–${ex.suggestion.repMax}`
       : `Baseline · ${ex.suggestion.repMin}–${ex.suggestion.repMax} reps`;
   const workCount = ex.sets.filter((s) => s.setType !== "WARMUP").length;
   const progress = describeProgression(
     ex.previous?.sets ?? [],
-    workingSets(ex.sets)
+    workingSets(ex.sets),
+    ex.assisted
   );
 
   return (
@@ -282,7 +284,7 @@ function ExerciseCard({
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {(showPrev ? ex.previous.sets : ex.previous.sets.slice(0, 3)).map((s, i) => (
                       <span key={i} className="rounded-lg bg-muted px-2.5 py-1 text-sm font-medium tabular-nums">
-                        {s.weightKg} kg × {s.reps}
+                        {s.weightKg} {unit} × {s.reps}
                       </span>
                     ))}
                     {!showPrev && ex.previous.sets.length > 3 && (
@@ -294,14 +296,24 @@ function ExerciseCard({
 
               {progress.load && (
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
-                  <TrendingUp className="h-4 w-4" /> Load: {progress.load.fromKg} → {progress.load.toKg} kg
-                  <span className="font-medium">↑ {progress.load.deltaKg} kg</span>
+                  <TrendingUp className="h-4 w-4" />
+                  {ex.assisted
+                    ? `Assistance: ${progress.load.fromKg} → ${progress.load.toKg} kg`
+                    : `Load: ${progress.load.fromKg} → ${progress.load.toKg} kg`}
+                  <span className="font-medium">
+                    {ex.assisted ? `↓ ${progress.load.deltaKg} kg less assistance` : `↑ ${progress.load.deltaKg} kg`}
+                  </span>
+                  {progress.load.topReps && progress.load.topReps.delta > 0 && (
+                    <span className="font-medium">
+                      · ↑ {progress.load.topReps.delta} rep{progress.load.topReps.delta === 1 ? "" : "s"}
+                    </span>
+                  )}
                 </p>
               )}
               {progress.reps && (
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
-                  <TrendingUp className="h-4 w-4" /> {progress.reps.weightKg} kg × {progress.reps.to}
-                  <span className="font-medium">↑ {progress.reps.delta} rep{progress.reps.delta === 1 ? "" : "s"} at {progress.reps.weightKg} kg</span>
+                  <TrendingUp className="h-4 w-4" /> {progress.reps.weightKg} {unit} × {progress.reps.to}
+                  <span className="font-medium">↑ {progress.reps.delta} rep{progress.reps.delta === 1 ? "" : "s"} at {progress.reps.weightKg} {ex.assisted ? "kg assistance" : "kg"}</span>
                 </p>
               )}
 
@@ -317,7 +329,7 @@ function ExerciseCard({
                           {s.setType === "WARMUP" ? "Warm-up" : `Set ${i + 1 - ex.sets.slice(0, i).filter((x) => x.setType === "WARMUP").length}`}
                         </span>
                         <span className="text-lg font-bold tabular-nums">
-                          {s.weightKg} kg × {s.reps}
+                          {s.weightKg} {unit} × {s.reps}
                         </span>
                         {s.rpe !== null && <span className="text-xs text-muted-foreground">RPE {s.rpe}</span>}
                       </span>
@@ -331,7 +343,7 @@ function ExerciseCard({
 
               <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
                 <div className="flex gap-3">
-                  <Stepper label="Weight kg" value={weight} step={2.5} decimals={1} onChange={setWeight} />
+                  <Stepper label={ex.assisted ? "Assistance kg" : "Weight kg"} value={weight} step={2.5} decimals={1} onChange={setWeight} />
                   <Stepper label="Reps" value={reps} step={1} min={1} onChange={setReps} />
                 </div>
                 <div className="flex items-center justify-between gap-2">

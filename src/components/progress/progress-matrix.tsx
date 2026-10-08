@@ -64,7 +64,7 @@ function Trend({ row }: { row: MatrixRow }) {
     return (
       <span className="inline-flex flex-col rounded-xl bg-gradient-to-br from-success/25 to-success/5 px-3 py-1.5 text-sm font-bold leading-tight tabular-nums text-success">
         <span>▲ +{row.trend.repDelta} rep{row.trend.repDelta === 1 ? "" : "s"}</span>
-        <span className="text-xs font-semibold opacity-80">at {formatNumber(row.trend.atKg ?? 0, 2)} kg</span>
+        <span className="text-xs font-semibold opacity-80">at {formatNumber(row.trend.atKg ?? 0, 2)} kg{row.assisted ? " assist" : ""}</span>
       </span>
     );
   }
@@ -86,18 +86,15 @@ function Trend({ row }: { row: MatrixRow }) {
       )}
     >
       <span>
-        {up ? "▲" : "▼"} {row.assisted ? (up ? "Less assist" : "More assist") : `${deltaKg > 0 ? "+" : ""}${formatNumber(deltaKg, 2)} kg`}
+        {up ? "▲" : "▼"}{" "}
+        {row.assisted
+          ? `${formatNumber(Math.abs(deltaKg), 2)} kg ${up ? "less" : "more"} assist`
+          : `${deltaKg > 0 ? "+" : ""}${formatNumber(deltaKg, 2)} kg`}
       </span>
       {pct !== null && !row.assisted && (
         <span className="text-xs font-semibold opacity-80">
           {pct > 0 ? "+" : ""}
           {pct}%
-        </span>
-      )}
-      {row.assisted && (
-        <span className="text-xs font-semibold opacity-80">
-          {deltaKg > 0 ? "+" : ""}
-          {formatNumber(deltaKg, 2)} kg
         </span>
       )}
     </span>
@@ -150,6 +147,11 @@ export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
                     <span className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       {row.muscleGroup}
                     </span>
+                    {row.assisted && (
+                      <span className="block text-[10px] font-medium normal-case text-muted-foreground">
+                        Lower assistance = stronger
+                      </span>
+                    )}
                   </span>
                 </th>
                 {row.cells.map((cell, i) => (

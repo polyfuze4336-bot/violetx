@@ -3,6 +3,7 @@ import { exerciseEntryRepository } from "@/lib/repositories/exercise";
 import { requireViewerAthlete } from "@/lib/services/context";
 import { toNumber } from "@/lib/dto";
 import { derivePrEvents } from "@/lib/services/personalRecord";
+import { isAssistedExercise } from "@/lib/progression-type";
 import {
   buildExerciseSeries,
   buildProgressMatrix,
@@ -69,6 +70,7 @@ async function loadRows(): Promise<{ rows: TrainingSet[]; prEvents: ReturnType<t
       reps: e.reps,
       weightKg: toNumber(e.weightKg),
       sets: e.sets ?? null,
+      assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
     })),
     prEvents: derivePrEvents(entries),
   };

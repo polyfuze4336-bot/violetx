@@ -30,6 +30,7 @@ export function PrCelebration({
 
   // Only an estimated-1RM achievement carries the "vs previous best" percentage.
   const best = data ? data.achievements.find((a) => a.type === "E1RM") ?? null : null;
+  const assisted = data ? data.achievements.some((a) => a.assisted) : false;
 
   return (
     <AnimatePresence>
@@ -74,12 +75,18 @@ export function PrCelebration({
               </div>
             </div>
             <p className="relative mt-3 text-3xl font-bold tabular-nums">
-              {data.weightKg} kg × {data.reps}
+              {data.weightKg} {assisted ? "kg assistance" : "kg"} × {data.reps}
             </p>
             <p className="relative text-sm text-muted-foreground">
-              Estimated 1RM: {data.estimatedOneRepMaxKg} kg
-              {best && best.deltaPct > 0 && (
-                <span className="ml-2 font-semibold text-success">+{best.deltaPct}% vs previous best</span>
+              {assisted ? (
+                "Lower assistance = stronger"
+              ) : (
+                <>
+                  Estimated 1RM: {data.estimatedOneRepMaxKg} kg
+                  {best && best.deltaPct > 0 && (
+                    <span className="ml-2 font-semibold text-success">+{best.deltaPct}% vs previous best</span>
+                  )}
+                </>
               )}
             </p>
             <ul className="relative mt-3 space-y-1.5">

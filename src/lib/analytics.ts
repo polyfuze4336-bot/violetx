@@ -1,5 +1,7 @@
 // Pure analytics helpers for trends and personal records. No IO — unit-testable.
 
+import { isBetterLoad } from "@/lib/progression-type";
+
 export interface SeriesPoint {
   date: string; // ISO
   value: number;
@@ -75,6 +77,8 @@ export interface PrInputSet {
   weightKg: number;
   reps: number;
   position: number;
+  /** Assisted exercise: weightKg is assistance, so lower is better. */
+  assisted?: boolean;
 }
 
 export interface PrEvent {
@@ -83,14 +87,17 @@ export interface PrEvent {
   date: string;
   weightKg: number;
   reps: number;
-  type: "WEIGHT" | "REPS";
+  type: "WEIGHT" | "ASSISTANCE" | "REPS";
   prevWeightKg: number | null;
   prevReps: number | null;
+  /** Assisted exercise: weightKg is assistance, not external load. */
+  assisted?: boolean;
 }
 
 /**
  * Detect personal-record achievements across a set history:
  *  - WEIGHT: a new maximum load for the exercise.
+ *  - ASSISTANCE: (assisted exercises) a new lowest assistance.
  *  - REPS: more repetitions at a weight than previously achieved at that weight.
  * The first set of each exercise establishes a baseline (not a PR).
  */
@@ -110,6 +117,7 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
       return d !== 0 ? d : a.position - b.position;
     });
 
+    const assisted = list.some((s) => s.assisted === true);
     let maxWeight = 0;
     let maxWeightReps = 0;
     // Rep records are contextual to the load, keyed to 0.01 kg to tolerate
@@ -127,14 +135,15 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
         continue;
       }
 
-      if (s.weightKg > maxWeight) {
+      if (isBetterLoad(s.weightKg, maxWeight, assisted)) {
         events.push({
           exerciseId: s.exerciseId,
           exerciseName: s.exerciseName,
           date: s.date,
           weightKg: s.weightKg,
           reps: s.reps,
-          type: "WEIGHT",
+          type: assisted ? "ASSISTANCE" : "WEIGHT",
+          ...(assisted ? { assisted: true } : {}),
           prevWeightKg: maxWeight,
           prevReps: maxWeightReps,
         });
@@ -156,6 +165,7 @@ export function detectPrEvents(sets: PrInputSet[]): PrEvent[] {
             weightKg: s.weightKg,
             reps: s.reps,
             type: "REPS",
+            ...(assisted ? { assisted: true } : {}),
             prevWeightKg: s.weightKg,
             prevReps,
           });
@@ -189,14 +199,17 @@ function collapseSameDayEvents(events: PrEvent[]): PrEvent[] {
       best.set(key, e);
       continue;
     }
-    const better = e.type === "WEIGHT" ? e.weightKg > cur.weightKg : e.reps > cur.reps;
+    const better =
+      e.type === "REPS" ? e.reps > cur.reps : isBetterLoad(e.weightKg, cur.weightKg, e.type === "ASSISTANCE");
     best.set(key, better ? { ...e, prevWeightKg: cur.prevWeightKg, prevReps: cur.prevReps } : cur);
   }
   return Array.from(best.values());
 }
 
 /** Short label and detail for a PR event: load PRs vs rep PRs (same load). */
-export function prEventDetail(e: Pick<PrEvent, "type" | "weightKg" | "reps" | "prevWeightKg" | "prevReps">): {
+export function prEventDetail(
+  e: Pick<PrEvent, "type" | "weightKg" | "reps" | "prevWeightKg" | "prevReps"> & { assisted?: boolean }
+): {
   label: string;
   detail: string;
 } {
@@ -204,7 +217,20 @@ export function prEventDetail(e: Pick<PrEvent, "type" | "weightKg" | "reps" | "p
     const d = e.prevReps !== null ? e.reps - e.prevReps : null;
     return {
       label: "Rep PR",
-      detail: d !== null ? `+${d} rep${d === 1 ? "" : "s"} at ${e.weightKg} kg` : `${e.reps} reps at ${e.weightKg} kg`,
+      detail:
+        d !== null
+          ? `+${d} rep${d === 1 ? "" : "s"} at ${e.weightKg} kg${e.assisted ? " assistance" : ""}`
+          : `${e.reps} reps at ${e.weightKg} kg${e.assisted ? " assistance" : ""}`,
+    };
+  }
+  if (e.type === "ASSISTANCE") {
+    const less = e.prevWeightKg !== null ? Math.round((e.prevWeightKg - e.weightKg) * 10) / 10 : null;
+    return {
+      label: "Assistance PR",
+      detail:
+        less !== null
+          ? `${less} kg less assistance (${e.prevWeightKg} → ${e.weightKg} kg)`
+          : `${e.weightKg} kg assistance`,
     };
   }
   const d = e.prevWeightKg !== null ? Math.round((e.weightKg - e.prevWeightKg) * 10) / 10 : null;

@@ -4,6 +4,7 @@ import { Activity, BarChart3, Clock, Dumbbell, Flame, Gauge, Trophy } from "luci
 import { requireAuth } from "@/lib/auth";
 import { analyticsService } from "@/lib/services/analytics";
 import { RANGES, type RangeKey } from "@/lib/analytics-engine";
+import { prEventDetail } from "@/lib/analytics";
 import { formatDate, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -166,11 +167,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: { 
               {a.prTimeline.slice(0, 8).map((p, i) => (
                 <li key={i} className="flex items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-2">
-                    <Trophy className={cn("h-4 w-4", p.type === "WEIGHT" ? "text-primary" : "text-magenta")} />
+                    <Trophy className={cn("h-4 w-4", p.type === "REPS" ? "text-magenta" : "text-primary")} />
                     <span className="font-medium">{p.exerciseName}</span>
                   </span>
                   <span className="tabular-nums text-muted-foreground">
-                    {p.type === "REPS" ? "Rep PR" : "Weight PR"} · {formatNumber(p.weightKg)} kg × {p.reps} · {formatDate(p.date)}
+                    {prEventDetail({ ...p, prevWeightKg: p.prevWeightKg ?? null, prevReps: p.prevReps ?? null }).label} · {formatNumber(p.weightKg)} kg{p.assisted ? " assistance" : ""} × {p.reps} · {formatDate(p.date)}
                   </span>
                 </li>
               ))}

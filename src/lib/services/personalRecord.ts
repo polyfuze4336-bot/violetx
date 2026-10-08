@@ -2,12 +2,15 @@ import { exerciseEntryRepository } from "@/lib/repositories/exercise";
 import { requireViewerAthlete } from "@/lib/services/context";
 import { toNumber } from "@/lib/dto";
 import { detectPrEvents, type PrEvent } from "@/lib/analytics";
+import { isAssistedExercise } from "@/lib/progression-type";
 
 export type PrEventDTO = PrEvent;
 
 export interface PersonalRecordDTO {
   exerciseId: string;
   exerciseName: string;
+  /** Assisted exercise: maxWeightKg is the LOWEST assistance and the 1RM estimate is 0. */
+  assisted: boolean;
   maxWeightKg: number;
   maxWeightReps: number;
   maxWeightDate: string;
@@ -61,6 +64,7 @@ export function derivePersonalRecords(
     string,
     {
       name: string;
+      assisted: boolean;
       maxWeight: { weightKg: number; reps: number; date: Date };
       maxReps: { reps: number; weightKg: number; date: Date };
       best1rm: number;
@@ -73,12 +77,15 @@ export function derivePersonalRecords(
     const weightKg = toNumber(e.weightKg);
     const reps = e.reps;
     const name = e.exercise?.name ?? "";
+    const assisted = isAssistedExercise({ name, equipment: e.exercise?.equipment });
     const existing = byExercise.get(e.exerciseId);
-    const oneRm = epley(weightKg, reps);
+    // Estimated 1RM is meaningless when the weight is assistance.
+    const oneRm = assisted ? 0 : epley(weightKg, reps);
 
     if (!existing) {
       byExercise.set(e.exerciseId, {
         name,
+        assisted,
         maxWeight: { weightKg, reps, date: e.date },
         maxReps: { reps, weightKg, date: e.date },
         best1rm: oneRm,
@@ -94,14 +101,14 @@ export function derivePersonalRecords(
 
     const mw = existing.maxWeight;
     if (
-      weightKg > mw.weightKg ||
+      (assisted ? weightKg < mw.weightKg : weightKg > mw.weightKg) ||
       (weightKg === mw.weightKg && reps > mw.reps)
     ) {
       existing.maxWeight = { weightKg, reps, date: e.date };
     }
 
     const mr = existing.maxReps;
-    if (reps > mr.reps || (reps === mr.reps && weightKg > mr.weightKg)) {
+    if (reps > mr.reps || (reps === mr.reps && (assisted ? weightKg < mr.weightKg : weightKg > mr.weightKg))) {
       existing.maxReps = { reps, weightKg, date: e.date };
     }
   }
@@ -111,6 +118,7 @@ export function derivePersonalRecords(
     records.push({
       exerciseId,
       exerciseName: r.name,
+      assisted: r.assisted,
       maxWeightKg: r.maxWeight.weightKg,
       maxWeightReps: r.maxWeight.reps,
       maxWeightDate: r.maxWeight.date.toISOString(),
@@ -138,6 +146,7 @@ export function derivePrEvents(entries: ExerciseEntryRows): PrEventDTO[] {
       weightKg: toNumber(e.weightKg),
       reps: e.reps,
       position: e.position,
+      assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
     }))
   );
 }

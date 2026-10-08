@@ -5,6 +5,7 @@ import { programRepository } from "@/lib/repositories/program";
 import { workoutRepository } from "@/lib/repositories/workout";
 import { requireViewerAthlete } from "@/lib/services/context";
 import { derivePrEvents } from "@/lib/services/personalRecord";
+import { isAssistedExercise } from "@/lib/progression-type";
 import { toNumber } from "@/lib/dto";
 import { buildAnalytics, type AnalyticsResult, type RangeKey } from "@/lib/analytics-engine";
 
@@ -29,6 +30,7 @@ export async function computeAnalytics(athleteId: string, range: RangeKey, now: 
           reps: e.reps,
           weightKg: toNumber(e.weightKg),
           sets: e.sets ?? null,
+          assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
           setType: e.setType,
           sessionId: e.sessionId,
         })),
@@ -54,6 +56,9 @@ export async function computeAnalytics(athleteId: string, range: RangeKey, now: 
           type: p.type,
           weightKg: p.weightKg,
           reps: p.reps,
+          prevWeightKg: p.prevWeightKg,
+          prevReps: p.prevReps,
+          assisted: p.assisted,
         })),
         plannedPerWeek: active ? active.templates.length : null,
       },

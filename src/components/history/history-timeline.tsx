@@ -153,7 +153,7 @@ export function HistoryTimeline({
                         <Row
                           key={i}
                           title={p.exerciseName}
-                          detail={`${formatNumber(p.weightKg)}kg × ${p.reps} — ${prEventDetail(p).label.toLowerCase()} ${prEventDetail(p).detail}`}
+                          detail={`${formatNumber(p.weightKg)}kg${p.assisted ? " assistance" : ""} × ${p.reps} — ${prEventDetail(p).label.toLowerCase()} ${prEventDetail(p).detail}`}
                         />
                       ))}
                     </Group>

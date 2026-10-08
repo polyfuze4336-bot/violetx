@@ -2,6 +2,7 @@
 // exercises (matched by name or alias, case-insensitive) are never modified.
 
 import type { MuscleGroup } from "@/lib/training-analytics";
+import { ASSISTED_EQUIPMENT } from "@/lib/progression-type";
 
 export interface StarterExercise {
   name: string;
@@ -27,7 +28,7 @@ export const STARTER_EXERCISES: StarterExercise[] = [
   { name: "Face Pull", primary: "Shoulders", secondary: ["Back"], equipment: "Cable", pattern: "Pull", instructions: "Pull the rope towards the face, elbows high, separating the hands at the end." },
   { name: "Deadlift", aliases: ["Conventional Deadlift"], primary: "Back", secondary: ["Hamstrings", "Glutes & Hips"], equipment: "Barbell", pattern: "Hinge", instructions: "Hinge at the hips, keep the bar close and back neutral, drive the floor away and lock out with the glutes." },
   { name: "Lat Pulldown", aliases: ["Pulldown"], primary: "Back", secondary: ["Biceps"], equipment: "Cable", pattern: "Pull", instructions: "Pull the bar to the upper chest by driving the elbows down, control the return to a full stretch." },
-  { name: "Pull-Up", aliases: ["Chin-Up", "Assisted Pull-Up"], primary: "Back", secondary: ["Biceps"], equipment: "Bodyweight", pattern: "Pull", instructions: "From a dead hang, pull the chest towards the bar and lower under control." },
+  { name: "Pull-Up", aliases: ["Chin-Up"], primary: "Back", secondary: ["Biceps"], equipment: "Bodyweight", pattern: "Pull", instructions: "From a dead hang, pull the chest towards the bar and lower under control." },
   { name: "Seated Cable Row", aliases: ["Cable Row", "Low Row"], primary: "Back", secondary: ["Biceps"], equipment: "Cable", pattern: "Pull", instructions: "Sit tall, pull the handle to the lower ribs, squeeze the shoulder blades and return slowly." },
   { name: "Barbell Row", aliases: ["Bent-Over Row"], primary: "Back", secondary: ["Biceps"], equipment: "Barbell", pattern: "Pull", instructions: "Hinge to about 45°, pull the bar to the lower ribs keeping the back flat." },
   { name: "Dumbbell Row", aliases: ["One-Arm Row", "Single-Arm Row"], primary: "Back", secondary: ["Biceps"], equipment: "Dumbbell", pattern: "Pull", instructions: "Brace on a bench, pull the dumbbell to the hip and lower to a full stretch." },
@@ -46,7 +47,10 @@ export const STARTER_EXERCISES: StarterExercise[] = [
   { name: "Triceps Pushdown", aliases: ["Tricep Pushdown", "Triceps Cable Pushdown"], primary: "Triceps", equipment: "Cable", pattern: "Isolation", instructions: "Elbows pinned to the sides, extend fully and return to about 90°." },
   { name: "Overhead Triceps Extension", aliases: ["Overhead Tricep Extension"], primary: "Triceps", equipment: "Cable", pattern: "Isolation", instructions: "Hold the weight overhead, lower behind the head and extend the elbows." },
   { name: "Skull Crusher", aliases: ["Lying Triceps Extension"], primary: "Triceps", equipment: "Barbell", pattern: "Isolation", instructions: "Lower the bar towards the forehead by bending the elbows, then extend." },
-  { name: "Dip", aliases: ["Assisted Dip", "Parallel Bar Dip"], primary: "Triceps", secondary: ["Chest", "Shoulders"], equipment: "Bodyweight", pattern: "Push", instructions: "Lower until upper arms are about parallel to the floor and press back up." },
+  { name: "Dip", aliases: ["Parallel Bar Dip"], primary: "Triceps", secondary: ["Chest", "Shoulders"], equipment: "Bodyweight", pattern: "Push", instructions: "Lower until upper arms are about parallel to the floor and press back up." },
+  { name: "Assisted Chin-Up", aliases: ["Assisted Chinup"], primary: "Back", secondary: ["Biceps"], equipment: ASSISTED_EQUIPMENT, pattern: "Pull", instructions: "Set the assistance, pull the chin over the bar with palms facing you and lower under control. Progress by lowering the assistance.", tips: "Lower assistance = stronger." },
+  { name: "Assisted Pull-Up", aliases: ["Assisted Pullup"], primary: "Back", secondary: ["Biceps"], equipment: ASSISTED_EQUIPMENT, pattern: "Pull", instructions: "Set the assistance, pull the chest towards the bar with an overhand grip and lower under control. Progress by lowering the assistance.", tips: "Lower assistance = stronger." },
+  { name: "Assisted Dip", primary: "Triceps", secondary: ["Chest", "Shoulders"], equipment: ASSISTED_EQUIPMENT, pattern: "Push", instructions: "Set the assistance, lower until upper arms are about parallel to the floor and press back up. Progress by lowering the assistance.", tips: "Lower assistance = stronger." },
   { name: "Plank", primary: "Core", equipment: "Bodyweight", pattern: "Core", instructions: "Forearms down, body in a straight line, brace the abs and hold." },
   { name: "Cable Crunch", primary: "Core", equipment: "Cable", pattern: "Core", instructions: "Kneel facing the stack and curl the ribs towards the hips." },
   { name: "Hanging Leg Raise", aliases: ["Leg Raise"], primary: "Core", equipment: "Bodyweight", pattern: "Core", instructions: "Hang from a bar and raise the legs without swinging." },

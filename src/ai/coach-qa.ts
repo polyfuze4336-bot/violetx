@@ -27,6 +27,8 @@ const SYSTEM_PROMPT = [
   "- Progress has two forms and both count: a heavier load, and MORE REPS at the same load (e.g. 80 kg x 8 -> 80 kg x 10 is",
   "  an improvement). Use the precomputed `progressions` list; never conclude 'no improvement' just because the weight is unchanged,",
   "  and never compute historical PRs or progressions yourself.",
+  "- Assisted lifts (progression kind ASSISTANCE, or `assisted: true`): the weight is machine/band ASSISTANCE, so LESS assistance is",
+  "  progress and means stronger. Say 'improved from 40 kg assistance to 25 kg assistance', never 'the load decreased'.",
   '- Return ONLY JSON: { "answer": string }',
 ].join("\n");
 

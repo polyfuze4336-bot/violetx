@@ -9,6 +9,8 @@ import {
   periodStart,
   addPeriods,
   resolveMuscleGroup,
+  rowAssisted,
+  rowVolumeKg,
   type TrainingSet,
 } from "@/lib/training-analytics";
 
@@ -31,12 +33,23 @@ export interface AnalyticsSession {
   sessionRpe: number | null;
 }
 
+export interface AnalyticsPr {
+  date: string;
+  exerciseName: string;
+  type: "WEIGHT" | "ASSISTANCE" | "REPS";
+  weightKg: number;
+  reps: number;
+  prevWeightKg?: number | null;
+  prevReps?: number | null;
+  assisted?: boolean;
+}
+
 export interface AnalyticsInput {
   sets: AnalyticsSet[];
   sessions: AnalyticsSession[];
   weights: { date: string; value: number }[];
   measurements: { name: string; unit: string; date: string; value: number }[];
-  prs: { date: string; exerciseName: string; type: "WEIGHT" | "REPS"; weightKg: number; reps: number }[];
+  prs: AnalyticsPr[];
   /** Sessions per week planned by the active program (null = no program). */
   plannedPerWeek: number | null;
 }
@@ -69,7 +82,7 @@ export interface AnalyticsResult {
   volumeByExercise: { name: string; sets: number; volumeKg: number }[];
   weekdayDistribution: { label: string; workouts: number }[];
   exerciseFrequency: { name: string; sessions: number }[];
-  prTimeline: { date: string; exerciseName: string; type: "WEIGHT" | "REPS"; weightKg: number; reps: number }[];
+  prTimeline: AnalyticsPr[];
   e1rmTrends: { name: string; points: { date: string; e1rm: number }[]; changePct: number | null }[];
   weightVsStrength: { label: string; weightIndex: number | null; strengthIndex: number | null }[];
   measurementTrends: { name: string; unit: string; first: number; latest: number; delta: number; points: number[] }[];
@@ -158,7 +171,7 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
     if (!b) continue;
     b.days.add(isoDay(s.date));
     b.sets += rowSets(s);
-    b.volumeKg += s.reps * s.weightKg * rowSets(s);
+    b.volumeKg += rowVolumeKg(s, rowSets(s));
   }
   const prs = input.prs.filter((p) => inRange(p.date));
   for (const p of prs) {
@@ -194,11 +207,11 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
     const m = resolveMuscleGroup(s.exerciseName, s.muscleGroup);
     const vm = muscle.get(m) ?? { sets: 0, volumeKg: 0 };
     vm.sets += rowSets(s);
-    vm.volumeKg += s.reps * s.weightKg * rowSets(s);
+    vm.volumeKg += rowVolumeKg(s, rowSets(s));
     muscle.set(m, vm);
     const ve = exercise.get(s.exerciseName) ?? { sets: 0, volumeKg: 0, days: new Set<string>() };
     ve.sets += rowSets(s);
-    ve.volumeKg += s.reps * s.weightKg * rowSets(s);
+    ve.volumeKg += rowVolumeKg(s, rowSets(s));
     ve.days.add(isoDay(s.date));
     exercise.set(s.exerciseName, ve);
   }
@@ -207,7 +220,12 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
   for (const d of Array.from(days)) weekdayCounts[(new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7] += 1;
 
   // Estimated 1RM trends for the most-trained exercises.
-  const top = Array.from(exercise.entries()).sort((a, b) => b[1].sets - a[1].sets).slice(0, 5);
+  // Assisted lifts are excluded: an estimated 1RM of an assistance weight is meaningless.
+  const assistedNames = new Set(sets.filter(rowAssisted).map((s) => s.exerciseName));
+  const top = Array.from(exercise.entries())
+    .filter(([name]) => !assistedNames.has(name))
+    .sort((a, b) => b[1].sets - a[1].sets)
+    .slice(0, 5);
   const e1rmTrends = top.map(([name]) => {
     const perDay = new Map<string, number>();
     for (const s of sets.filter((x) => x.exerciseName === name)) {
@@ -292,7 +310,7 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
     adherence = { pct: planned > 0 && complete.length >= 1 ? Math.round((done / planned) * 100) : null, planned, done, weekly };
   }
 
-  const totalVolume = sets.reduce((a, s) => a + s.reps * s.weightKg * rowSets(s), 0);
+  const totalVolume = sets.reduce((a, s) => a + rowVolumeKg(s, rowSets(s)), 0);
   const durs = durations.map((d) => d.minutes);
   void sessionById;
 

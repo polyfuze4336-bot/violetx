@@ -274,13 +274,13 @@ export default async function CoachSharePage({
                         {r.exerciseName}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatNumber(r.maxWeightKg)} kg × {r.maxWeightReps}
+                        {formatNumber(r.maxWeightKg)} kg{r.assisted ? " assist" : ""} × {r.maxWeightReps}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {r.maxReps} × {formatNumber(r.maxRepsWeightKg)} kg
+                        {r.maxReps} × {formatNumber(r.maxRepsWeightKg)} kg{r.assisted ? " assist" : ""}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatNumber(r.estimatedOneRepMaxKg)} kg
+                        {r.assisted ? "—" : `${formatNumber(r.estimatedOneRepMaxKg)} kg`}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {formatDate(r.lastPerformed)}

@@ -37,11 +37,13 @@ export default async function RecordsPage() {
   const { series, prEvents } = history;
   const seriesById = new Map(series.map((s) => [s.exerciseId, s]));
   const prCountByExercise = new Map<string, number>();
-  for (const e of prEvents.filter((p) => p.type === "WEIGHT")) {
+  for (const e of prEvents.filter((p) => p.type !== "REPS")) {
     prCountByExercise.set(e.exerciseId, (prCountByExercise.get(e.exerciseId) ?? 0) + 1);
   }
-  const heaviest = records.reduce((a, b) => (b.maxWeightKg > a.maxWeightKg ? b : a));
-  const leaderboard = [...records]
+  // Assisted lifts are excluded here: their weight is assistance, not load.
+  const weighted = records.filter((r) => !r.assisted);
+  const heaviest = weighted.length ? weighted.reduce((a, b) => (b.maxWeightKg > a.maxWeightKg ? b : a)) : null;
+  const leaderboard = [...weighted]
     .sort((a, b) => b.estimatedOneRepMaxKg - a.estimatedOneRepMaxKg)
     .slice(0, 10)
     .map((r) => ({ name: r.exerciseName, value: r.estimatedOneRepMaxKg }));
@@ -54,13 +56,15 @@ export default async function RecordsPage() {
       <section className="grid grid-cols-3 gap-3">
         <StatCard label="PRs" icon={Trophy} accent="magenta" value={String(prEvents.length)} />
         <StatCard label="Lifts" icon={Dumbbell} value={String(records.length)} />
-        <StatCard
-          label={heaviest.exerciseName}
-          icon={Medal}
-          accent="success"
-          value={formatNumber(heaviest.maxWeightKg)}
-          unit="kg"
-        />
+        {heaviest && (
+          <StatCard
+            label={heaviest.exerciseName}
+            icon={Medal}
+            accent="success"
+            value={formatNumber(heaviest.maxWeightKg)}
+            unit="kg"
+          />
+        )}
       </section>
 
       <Card>
@@ -88,11 +92,11 @@ export default async function RecordsPage() {
               key={i}
               className="flex min-w-[9.5rem] shrink-0 flex-col gap-1 rounded-xl border bg-card p-3"
             >
-              <Trophy className={cn("h-4 w-4", e.type === "WEIGHT" ? "text-primary" : "text-magenta")} />
+              <Trophy className={cn("h-4 w-4", e.type === "REPS" ? "text-magenta" : "text-primary")} />
               <p className="truncate text-sm font-semibold">{e.exerciseName}</p>
               <p className="text-lg font-bold tabular-nums">
                 {formatNumber(e.weightKg)}
-                <span className="text-xs font-medium text-muted-foreground"> kg × {e.reps}</span>
+                <span className="text-xs font-medium text-muted-foreground"> kg{e.assisted ? " assist" : ""} × {e.reps}</span>
               </p>
               <p className="text-[11px] font-semibold text-primary">
                 {prEventDetail(e).label} · {prEventDetail(e).detail}
@@ -116,7 +120,11 @@ export default async function RecordsPage() {
         {records.map((r) => {
           const points = seriesById.get(r.exerciseId)?.points ?? [];
           const first = points[0]?.maxWeightKg ?? 0;
-          const pct = first > 0 ? Math.round(((r.maxWeightKg - first) / first) * 100) : 0;
+          // Assisted: less assistance than the first session is progress.
+          const pct =
+            first > 0
+              ? Math.round((((r.assisted ? first - r.maxWeightKg : r.maxWeightKg - first)) / first) * 100)
+              : 0;
           return (
             <Link key={r.exerciseId} href={`/dashboard/exercises/${r.exerciseId}`}>
               <Card className="h-full p-4 transition-shadow hover:shadow-md">
@@ -130,9 +138,10 @@ export default async function RecordsPage() {
                 </div>
                 <p className="mt-1 text-3xl font-bold tabular-nums">
                   {formatNumber(r.maxWeightKg)}
-                  <span className="ml-1 text-sm font-medium text-muted-foreground">kg</span>
+                  <span className="ml-1 text-sm font-medium text-muted-foreground">{r.assisted ? "kg assist" : "kg"}</span>
                 </p>
-                <Sparkline values={points.map((p) => p.maxWeightKg)} height={44} />
+                {r.assisted && <p className="text-[11px] text-muted-foreground">Lower assistance = stronger</p>}
+                <Sparkline values={points.map((p) => (r.assisted ? -p.maxWeightKg : p.maxWeightKg))} height={44} />
                 <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <Trophy className="h-3 w-3" /> {prCountByExercise.get(r.exerciseId) ?? 0}

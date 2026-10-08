@@ -7,6 +7,7 @@ import { requireViewerAthlete } from "@/lib/services/context";
 import { nutritionService } from "@/lib/services/nutrition";
 import { toNumber } from "@/lib/dto";
 import { detectPrEvents } from "@/lib/analytics";
+import { isAssistedExercise } from "@/lib/progression-type";
 import { computeReadiness } from "@/lib/readiness";
 import { buildWeeklyReview, mondayOf, type WeeklyReview } from "@/lib/weekly-review";
 import { todayIso } from "@/lib/dates";
@@ -40,6 +41,7 @@ export const weeklyReviewService = {
         weightKg: toNumber(e.weightKg),
         reps: e.reps,
         position: e.position,
+        assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
       }))
     );
 
@@ -53,6 +55,7 @@ export const weeklyReviewService = {
         reps: e.reps,
         weightKg: toNumber(e.weightKg),
         sets: e.sets ?? null,
+        assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
         setType: e.setType,
       })),
       prs: prs.map((p) => ({
@@ -63,6 +66,7 @@ export const weeklyReviewService = {
         reps: p.reps,
         prevWeightKg: p.prevWeightKg,
         prevReps: p.prevReps,
+        assisted: p.assisted,
       })),
       weights: weights.map((w) => ({ date: w.date.toISOString(), value: toNumber(w.weightKg) })),
       waistCm: measurements

@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowRight, ArrowUpRight, Info, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Info, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -40,6 +40,13 @@ const MODES: { key: Mode; label: string }[] = [
   { key: "WEIGHT", label: "Max weight" },
   { key: "REPS", label: "Max reps" },
   { key: "EST", label: "Estimated strength" },
+  { key: "HISTORY", label: "History" },
+];
+
+// Assisted lifts: the weight is assistance, and estimated strength is not computed.
+const ASSISTED_MODES: { key: Mode; label: string }[] = [
+  { key: "WEIGHT", label: "Assistance" },
+  { key: "REPS", label: "Max reps" },
   { key: "HISTORY", label: "History" },
 ];
 
@@ -92,11 +99,14 @@ function ChartTooltip({
 export function ExerciseProgression({
   progression,
   history,
+  assisted = false,
 }: {
   progression: ProgressionPoint[];
   history: ExerciseSetRow[];
+  assisted?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("WEIGHT");
+  const modes = assisted ? ASSISTED_MODES : MODES;
 
   return (
     <Card>
@@ -107,7 +117,7 @@ export function ExerciseProgression({
             Progress
           </div>
           <div className="flex flex-wrap gap-1">
-            {MODES.map((m) => (
+            {modes.map((m) => (
               <button
                 key={m.key}
                 type="button"
@@ -127,9 +137,9 @@ export function ExerciseProgression({
       </CardHeader>
       <CardContent>
         {mode === "HISTORY" ? (
-          <HistoryTable history={history} />
+          <HistoryTable history={history} assisted={assisted} />
         ) : (
-          <MetricChart mode={mode} progression={progression} />
+          <MetricChart mode={mode} progression={progression} assisted={assisted} />
         )}
       </CardContent>
     </Card>
@@ -139,11 +149,17 @@ export function ExerciseProgression({
 function MetricChart({
   mode,
   progression,
+  assisted,
 }: {
   mode: Exclude<Mode, "HISTORY">;
   progression: ProgressionPoint[];
+  assisted: boolean;
 }) {
-  const { pick, unit, color } = METRIC[mode];
+  const { pick, color } = METRIC[mode];
+  // Assisted weight is assistance: lower is better, so it is labelled and the
+  // axis is flipped to keep improvement from looking like decline.
+  const assistance = assisted && mode === "WEIGHT";
+  const unit = assistance ? "kg assistance" : METRIC[mode].unit;
   const values = progression.map(pick);
   const stats = computeSeriesStats(
     progression.map((p) => ({ date: p.date, value: pick(p) }))
@@ -160,6 +176,8 @@ function MetricChart({
   }
 
   const plateau = trailingPlateau(values);
+  const improving = stats ? (assistance ? stats.deltaStart < 0 : stats.deltaStart > 0) : false;
+  const declining = stats ? (assistance ? stats.deltaStart > 0 : stats.deltaStart < 0) : false;
 
   if (progression.length === 0) {
     return (
@@ -188,19 +206,16 @@ function MetricChart({
         <div className="flex items-center gap-2">
           {stats.deltaStart === 0 ? (
             <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          ) : stats.deltaStart > 0 ? (
+            <ArrowUpRight className={cn("h-4 w-4", improving ? "text-success" : "text-magenta")} />
           ) : (
-            <ArrowUpRight
-              className={cn(
-                "h-4 w-4",
-                stats.deltaStart > 0 ? "text-success" : "text-magenta"
-              )}
-            />
+            <ArrowDownRight className={cn("h-4 w-4", improving ? "text-success" : "text-magenta")} />
           )}
           <span
             className={cn(
               "text-lg font-bold tabular-nums",
-              stats.deltaStart > 0 && "text-success",
-              stats.deltaStart < 0 && "text-magenta"
+              improving && "text-success",
+              declining && "text-magenta"
             )}
           >
             {formatDelta(stats.deltaStart)} {unit}
@@ -208,6 +223,16 @@ function MetricChart({
           {stats.pctStart !== null && (
             <span className="text-sm font-medium text-muted-foreground">
               ({formatDelta(stats.pctStart)}%) since starting
+            </span>
+          )}
+          {assistance && improving && (
+            <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
+              Strength ↑ Improving
+            </span>
+          )}
+          {assistance && declining && (
+            <span className="rounded-full bg-magenta/10 px-2 py-0.5 text-xs font-semibold text-magenta">
+              More assistance
             </span>
           )}
         </div>
@@ -255,6 +280,7 @@ function MetricChart({
             width={40}
             className="fill-muted-foreground"
             domain={["auto", "auto"]}
+            reversed={assistance}
           />
           <Tooltip
             content={<ChartTooltip unit={unit} />}
@@ -272,10 +298,17 @@ function MetricChart({
         </AreaChart>
       </ResponsiveContainer>
 
+      {assistance && (
+        <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          Lower assistance = stronger. The axis is flipped: higher on the chart means less assistance.
+        </p>
+      )}
+
       {plateau >= 3 && (
         <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
           <Info className="h-4 w-4 shrink-0" />
-          {mode === "REPS" ? "Reps" : mode === "EST" ? "Estimated strength" : "Weight"}{" "}
+          {mode === "REPS" ? "Reps" : mode === "EST" ? "Estimated strength" : assistance ? "Assistance" : "Weight"}{" "}
           unchanged for {plateau} sessions.
         </div>
       )}
@@ -283,7 +316,7 @@ function MetricChart({
   );
 }
 
-function HistoryTable({ history }: { history: ExerciseSetRow[] }) {
+function HistoryTable({ history, assisted }: { history: ExerciseSetRow[]; assisted: boolean }) {
   const rows = [...history].reverse();
   if (rows.length === 0) {
     return (
@@ -298,7 +331,7 @@ function HistoryTable({ history }: { history: ExerciseSetRow[] }) {
         <TableRow>
           <TableHead>Date</TableHead>
           <TableHead>Reps × Weight</TableHead>
-          <TableHead>Est. strength</TableHead>
+          {!assisted && <TableHead>Est. strength</TableHead>}
           <TableHead>Source</TableHead>
         </TableRow>
       </TableHeader>
@@ -307,11 +340,13 @@ function HistoryTable({ history }: { history: ExerciseSetRow[] }) {
           <TableRow key={r.id}>
             <TableCell>{formatDate(r.date)}</TableCell>
             <TableCell className="font-medium tabular-nums">
-              {r.reps} × {r.weightKg} kg
+              {r.reps} × {r.weightKg} kg{assisted ? " assistance" : ""}
             </TableCell>
-            <TableCell className="tabular-nums text-muted-foreground">
-              {r.estStrength} kg
-            </TableCell>
+            {!assisted && (
+              <TableCell className="tabular-nums text-muted-foreground">
+                {r.estStrength} kg
+              </TableCell>
+            )}
             <TableCell className="text-xs text-muted-foreground">
               {r.source === "WHATSAPP" ? "WhatsApp" : "Manual"}
             </TableCell>
