@@ -236,3 +236,4 @@ describe("demo dataset: believable, non-linear body progress", () => {
     expect(data.athlete.displayName).toBe("Demo Athlete");
   });
 });
+

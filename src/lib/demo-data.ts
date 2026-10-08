@@ -226,7 +226,9 @@ export function buildDemoDataset(opts: DemoOptions): DemoDataset {
 
   // ----- Planned sessions (adherence varies; one light holiday week) -----
   const planned: { date: Date; key: TemplateKey }[] = [];
-  for (let w = 0; w < DEMO_WEEKS; w++) {
+  // Cover every week up to and including the current (possibly partial) one.
+  const weekCount = Math.floor((today.getTime() - start.getTime()) / (7 * DAY_MS)) + 1;
+  for (let w = 0; w < weekCount; w++) {
     const monday = addDays(start, w * 7);
     const days: [number, TemplateKey][] =
       w < 6
@@ -386,7 +388,7 @@ export function buildDemoDataset(opts: DemoOptions): DemoDataset {
   for (let d = 0; d < totalDays; d++) {
     if (rand() > 0.78) continue;
     const x = t(d);
-    const trend = 86.4 - 6.6 * Math.pow(x, 0.92) + (x > 0.52 && x < 0.64 ? 0.55 * Math.sin(((x - 0.52) / 0.12) * Math.PI) : 0);
+    const trend = 86.4 - 6.6 * Math.pow(x, 0.92) + (x > 0.5 && x < 0.66 ? 0.95 * Math.sin(((x - 0.5) / 0.16) * Math.PI) : 0);
     const week = 0.3 * Math.sin((d / 7) * 2 * Math.PI) + gauss() * 0.22;
     bodyWeights.push({ id: id("bw", bodyWeights.length), athleteId, date: addDays(start, d), weightKg: r1(trend + week), source: "MANUAL", createdAt: addDays(start, d) });
   }
