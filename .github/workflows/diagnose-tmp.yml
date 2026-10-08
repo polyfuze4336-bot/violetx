@@ -20,18 +20,15 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: SQL server / db / firewall
-        run: |
-          az sql db list -g "$RG" -s "$SQL" --query "[].{n:name,status:status,sku:currentSku.name,pause:autoPauseDelay,free:useFreeLimit,exhaust:freeLimitExhaustionBehavior}" -o table
-          az sql server firewall-rule list -g "$RG" -s "$SQL" -o table
-          az sql server show -g "$RG" -n "$SQL" --query "{pna:publicNetworkAccess}" -o json
-      - name: Web app
-        run: |
-          az webapp show -g "$RG" -n "${{ secrets.AZURE_WEBAPP_NAME }}" --query "{state:state,outbound:outboundIpAddresses,possible:possibleOutboundIpAddresses}" -o json
-          az webapp config appsettings list -g "$RG" -n "${{ secrets.AZURE_WEBAPP_NAME }}" --query "[].name" -o tsv
-      - name: Recent app logs
+      - name: Download and scan logs
         run: |
           az webapp log download -g "$RG" -n "${{ secrets.AZURE_WEBAPP_NAME }}" --log-file logs.zip -o none || true
           unzip -o -q logs.zip -d logs || true
-          ls -R logs | head -30
-          for f in $(find logs -name '*default_docker.log' | head -2); do echo "== $f"; tail -60 "$f" | cut -c1-300; done
+          for f in logs/LogFiles/2026_10_08_*_default_docker.log; do
+            echo "== $f $(wc -l < $f) lines"
+            grep -n -m1 -E 'prisma:error|Error' "$f" | cut -c1-250
+            echo "-- error kinds"
+            grep -E 'code: |Error' "$f" | sed -E 's/^[0-9T:.Z-]+ //' | cut -c1-120 | sort | uniq -c | sort -rn | head -12
+            echo "-- first 40 lines around first error"
+            L=$(grep -n -m1 -E 'prisma:error' "$f" | cut -d: -f1); [ -n "$L" ] && sed -n "$((L>10?L-10:1)),$((L+30))p" "$f" | cut -c1-260
+          done
