@@ -52,3 +52,4 @@ Final end-to-end validation. Production: `https://violetx-web-v6s4btstixeoe.azur
 - Volume PR appears in the workout-finish summary only.
 - Local `az` has no access to the production subscription, so server logs/App Insights were not queried; the browser console and HTTP status were used instead.
 - Demo credentials (`demo` / `violetx`) are for the prototype only and are gated by `DEMO_MODE_ENABLED`.
+- After a deploy/restart or a long idle period the very first demo sign-in can take 1-2 minutes (cold start plus serverless database resume); later sign-ins take about 10 s. Warm the demo (open View Demo once) before presenting.
