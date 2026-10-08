@@ -55,7 +55,8 @@ export async function middleware(req: NextRequest) {
 
   if (!token) {
     const signInUrl = new URL("/signin", req.url);
-    signInUrl.searchParams.set("callbackUrl", pathname);
+    // Keep the full deep link (including the query) so sign-in lands back on it.
+    signInUrl.searchParams.set("callbackUrl", `${pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(signInUrl);
   }
 

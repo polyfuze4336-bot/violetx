@@ -108,6 +108,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  process.env.DEMO_MODE_ENABLED = "true";
   fake.writes.length = 0;
   session.mockReset();
   session.mockResolvedValue({
@@ -178,7 +179,8 @@ describe("demo UX", () => {
   }, 60_000);
 
   it("the sign-in form accepts a username", async () => {
-    const html = await render(() => import("@/app/signin/page") as never);
+    session.mockResolvedValue(null);
+    const html = await render(() => import("@/app/signin/page") as never, { searchParams: {} });
     expect(html).toContain("Email or username");
     expect(html).not.toContain('type="email"');
   }, 60_000);

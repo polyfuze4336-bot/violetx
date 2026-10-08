@@ -31,6 +31,8 @@ beforeEach(() => {
   fake = new FakePrisma({ user: [], athlete: [], exercise: [], exerciseEntry: [], gymBranch: [] });
   (globalThis as unknown as { __fake: FakePrisma }).__fake = fake;
   session.mockReset();
+  // Demo sessions are only honoured while demo mode is switched on.
+  process.env.DEMO_MODE_ENABLED = "true";
   as("DEMO_VIEWER");
 });
 

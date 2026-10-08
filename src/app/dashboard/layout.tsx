@@ -3,7 +3,7 @@ import { Eye } from "lucide-react";
 
 import { getServerAuthSession } from "@/lib/auth";
 import { DashboardShell } from "@/components/dashboard/shell";
-import { DEMO_BANNER_TEXT, DEMO_BANNER_TITLE } from "@/lib/demo-mode";
+import { DEMO_BANNER_TEXT, DEMO_BANNER_TITLE, isDemoModeEnabled } from "@/lib/demo-mode";
 
 export default async function DashboardLayout({
   children,
@@ -11,7 +11,8 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerAuthSession();
-  if (!session?.user?.id) {
+  // No session, or a demo session after demo mode was switched off.
+  if (!session?.user?.id || (session.user.role === "DEMO_VIEWER" && !isDemoModeEnabled())) {
     redirect("/signin?callbackUrl=/dashboard");
   }
 

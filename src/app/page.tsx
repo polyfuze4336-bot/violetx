@@ -2,6 +2,11 @@ import Link from "next/link";
 import { LineChart, MessageSquareText, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo, LogoWordmark } from "@/components/brand/logo";
+import { ViewDemoButton } from "@/components/auth/view-demo-button";
+import { isDemoModeEnabled } from "@/lib/demo-mode";
+
+// The demo button depends on the deployment setting.
+export const dynamic = "force-dynamic";
 
 const features = [
   {
@@ -30,8 +35,8 @@ export default function Home() {
       <header className="glass sticky top-0 z-30 border-b">
         <div className="container flex h-16 items-center justify-between">
           <LogoWordmark />
-          <Button asChild size="sm">
-            <Link href="/dashboard">Sign in</Link>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/signin">Sign in</Link>
           </Button>
         </div>
       </header>
@@ -51,9 +56,10 @@ export default function Home() {
             Violet, and explore gyms across Malaysia. Coaches follow along,
             read-only.
           </p>
-          <div className="flex items-center justify-center gap-3">
-            <Button asChild size="lg">
-              <Link href="/dashboard">Open dashboard</Link>
+          <div className="flex flex-wrap items-start justify-center gap-3">
+            {isDemoModeEnabled() && <ViewDemoButton callbackUrl="/dashboard" size="lg" />}
+            <Button asChild size="lg" variant={isDemoModeEnabled() ? "outline" : "default"}>
+              <Link href="/signin">Sign in</Link>
             </Button>
           </div>
         </div>

@@ -9,6 +9,8 @@ A read-only demo account lets anyone explore VioletX with realistic **fictional*
 | Username | `demo` |
 | Password | `violetx` |
 
+Easiest way in: open the sign-in page (or the landing page) and click **View Demo**. No typing needed. See [AUTHENTICATION](./AUTHENTICATION.md) for the full model.
+
 ## How it works
 
 * **Role `DEMO_VIEWER`** (`src/lib/rbac.ts`) is stored in `User.role` (a string column, so no schema change).

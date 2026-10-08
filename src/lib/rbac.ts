@@ -29,7 +29,7 @@ export function isDemoViewer(role: Role | null | undefined): boolean {
  * such as nutrition. Writes are separate: see canWrite.
  */
 export function showsOwnerUi(role: Role | null | undefined): boolean {
-  return role === ROLES.OWNER || role === ROLES.DEMO_VIEWER;
+  return capabilitiesOf(role).private;
 }
 
 /**
@@ -47,9 +47,40 @@ export function resolveRole(
     : ROLES.COACH;
 }
 
+/**
+ * The three prototype personas. COACH_SHARE is not a login: it is the
+ * unauthenticated, token-authorised coach view (/share/coach/{token}).
+ */
+export type Persona = "OWNER" | "DEMO_VIEWER" | "COACH_SHARE";
+
+export interface Capabilities {
+  /** May read the athlete's data. */
+  read: boolean;
+  /** May create, update or delete anything. Only the owner. */
+  write: boolean;
+  /** May see private areas (nutrition, notes, check-in details). */
+  private: boolean;
+}
+
+/**
+ * The single authorization table. Every server-side mutation is gated by
+ * `write` (via requireOwner / requireOwnerAthlete); UI hiding is cosmetic.
+ */
+export const CAPABILITIES: Record<Persona | "COACH", Capabilities> = {
+  OWNER: { read: true, write: true, private: true },
+  DEMO_VIEWER: { read: true, write: false, private: true },
+  // Legacy signed-in coach: read-only, no private areas.
+  COACH: { read: true, write: false, private: false },
+  COACH_SHARE: { read: true, write: false, private: false },
+};
+
+export function capabilitiesOf(role: Role | null | undefined): Capabilities {
+  return role ? CAPABILITIES[role] : { read: false, write: false, private: false };
+}
+
 /** Whether a role is allowed to perform write (create/update/delete) actions. */
 export function canWrite(role: Role | null | undefined): boolean {
-  return role === ROLES.OWNER;
+  return capabilitiesOf(role).write;
 }
 
 /** Error thrown when an action is not permitted for the current role. */
