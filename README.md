@@ -60,6 +60,7 @@ no feature was removed or redesigned away, and historical data stays valid.
 
 Deep dives: [DATA-MODEL](docs/DATA-MODEL.md) · [WORKOUT-ENGINE](docs/WORKOUT-ENGINE.md) ·
 [VIOLET-INTELLIGENCE](docs/VIOLET-INTELLIGENCE.md) · [AI-SAFETY](docs/AI-SAFETY.md) · [ROADMAP](docs/ROADMAP.md).
+Prototype showcase: a read-only **demo account** with fictional history — see [DEMO-MODE](docs/DEMO-MODE.md).
 
 ### Implementation assessment (what V2 started from)
 * **Existing:** DB-authenticated OWNER/COACH, measurements, body weight, set logging (`ExerciseEntry`), derived PRs,

@@ -46,8 +46,9 @@ export function UserMenu({
 
   // The athlete is never shown by real name; their email is hidden in the UI.
   const isOwner = role === "OWNER";
-  const displayName = isOwner ? PATIENT_LABEL : name ?? "Coach";
-  const displayEmail = isOwner ? null : email;
+  const isDemo = role === "DEMO_VIEWER";
+  const displayName = isOwner ? PATIENT_LABEL : isDemo ? "Demo athlete" : name ?? "Coach";
+  const displayEmail = isOwner || isDemo ? null : email;
 
   return (
     <div className="flex items-center gap-3">
@@ -58,7 +59,7 @@ export function UserMenu({
             : "hidden items-center rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground sm:inline-flex"
         }
       >
-        {isOwner ? PATIENT_LABEL : "Coach · read-only"}
+        {isOwner ? PATIENT_LABEL : isDemo ? "Demo · read-only" : "Coach · read-only"}
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -69,11 +70,11 @@ export function UserMenu({
             aria-label="Account menu"
           >
             <Avatar className="h-9 w-9">
-              {image && !isOwner ? (
+              {image && !isOwner && !isDemo ? (
                 <AvatarImage src={image} alt="" />
               ) : null}
               <AvatarFallback>
-                {isOwner ? "PX" : initials(name, email)}
+                {isOwner ? "PX" : isDemo ? "DM" : initials(name, email)}
               </AvatarFallback>
             </Avatar>
           </Button>

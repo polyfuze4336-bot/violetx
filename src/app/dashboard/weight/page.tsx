@@ -25,10 +25,11 @@ import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
 import { ConfirmDeleteButton } from "@/components/dashboard/delete-button";
 import { TrendChartCard } from "@/components/charts/trend-chart-card";
 import { WeightForm } from "@/components/weight/weight-form";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function WeightPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
   const entries = viewer.athleteId ? await bodyWeightService.list() : [];
 
   const history = [...entries].reverse();

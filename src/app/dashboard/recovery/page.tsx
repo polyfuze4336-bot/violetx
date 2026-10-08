@@ -9,12 +9,13 @@ import { CheckInForm } from "@/components/recovery/check-in-form";
 import { ReadinessGauge } from "@/components/recovery/readiness-gauge";
 import { formatShortDate } from "@/lib/format";
 import { todayIso } from "@/lib/dates";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function RecoveryPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
   const overview = viewer.athleteId ? await checkInService.overview(todayIso(), 30) : null;
   const history = overview?.history ?? [];
 

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import { ROLES } from "@/lib/rbac";
 
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -22,7 +23,8 @@ export const passwordResetService = {
   async requestReset(emailRaw: string): Promise<RequestResetResult> {
     const email = emailRaw.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.active) return {};
+    // The shared demo account's password can never be changed.
+    if (!user || !user.active || user.role === ROLES.DEMO_VIEWER) return {};
 
     const token = randomBytes(32).toString("hex");
     await prisma.passwordResetToken.create({
@@ -42,6 +44,11 @@ export const passwordResetService = {
       where: { tokenHash: sha256(token) },
     });
     if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new Error("This reset link is invalid or has expired.");
+    }
+
+    const target = await prisma.user.findUnique({ where: { id: record.userId } });
+    if (target?.role === ROLES.DEMO_VIEWER) {
       throw new Error("This reset link is invalid or has expired.");
     }
 

@@ -9,10 +9,11 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { ConfirmDeleteButton } from "@/components/dashboard/delete-button";
 import { NoteDialog } from "@/components/notes/note-dialog";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function NotesPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
   const notes = viewer.athleteId ? await noteService.list() : [];
 
   return (

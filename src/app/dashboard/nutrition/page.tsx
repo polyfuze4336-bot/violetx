@@ -32,6 +32,7 @@ import { dayProgress, nutritionObservations, type WeekPoint } from "@/lib/nutrit
 import { todayIso } from "@/lib/dates";
 import { bodyWeightService } from "@/lib/services/bodyWeight";
 import { analyticsService } from "@/lib/services/analytics";
+import { showsOwnerUi } from "@/lib/rbac";
 
 function cell(value: number | null, suffix = "") {
   return value === null ? "—" : `${formatNumber(value)}${suffix}`;
@@ -39,7 +40,7 @@ function cell(value: number | null, suffix = "") {
 
 export default async function NutritionPage() {
   const viewer = await requireAuth();
-  if (viewer.role !== "OWNER") redirect("/dashboard");
+  if (!showsOwnerUi(viewer.role)) redirect("/dashboard");
 
   const [entries, targets, weights, analytics] = viewer.athleteId
     ? await Promise.all([nutritionService.list(), nutritionService.getTargets(), bodyWeightService.list(), analyticsService.get("6M")])

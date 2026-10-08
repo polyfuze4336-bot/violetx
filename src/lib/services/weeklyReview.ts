@@ -1,3 +1,4 @@
+import { showsOwnerUi } from "@/lib/rbac";
 import { bodyWeightRepository } from "@/lib/repositories/bodyWeight";
 import { exerciseEntryRepository } from "@/lib/repositories/exercise";
 import { checkInRepository } from "@/lib/repositories/goal";
@@ -16,7 +17,7 @@ export const weeklyReviewService = {
   /** Review for the Monday–Sunday week containing `weekOf` (default: this week). */
   async get(weekOf: string = todayIso()): Promise<WeeklyReview> {
     const { athleteId, actor } = await requireViewerAthlete();
-    const isOwner = actor.role === "OWNER";
+    const isOwner = showsOwnerUi(actor.role);
     const weekStart = mondayOf(weekOf);
     const since = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() - 21 * 86_400_000);
 

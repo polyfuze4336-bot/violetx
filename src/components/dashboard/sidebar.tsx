@@ -17,7 +17,10 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter(
-    (item) => !item.ownerOnly || role === "OWNER"
+    (item) =>
+      !item.ownerOnly ||
+      role === "OWNER" ||
+      (role === "DEMO_VIEWER" && item.demoVisible)
   );
 
   return (

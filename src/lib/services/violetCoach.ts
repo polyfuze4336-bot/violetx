@@ -9,7 +9,7 @@ import { goalService } from "@/lib/services/goal";
 import { measurementService } from "@/lib/services/measurement";
 import { noteService } from "@/lib/services/note";
 import { nutritionService } from "@/lib/services/nutrition";
-import { requireOwnerAthlete } from "@/lib/services/context";
+import { requireOwnerOrDemoAthlete } from "@/lib/services/context";
 import { todayIso } from "@/lib/dates";
 import { toNumber } from "@/lib/dto";
 import { isAssistedExercise } from "@/lib/progression-type";
@@ -87,7 +87,7 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
 
 export const violetCoachService = {
   async snapshot(windowDays = WINDOW_DAYS): Promise<InsightSnapshot> {
-    await requireOwnerAthlete();
+    await requireOwnerOrDemoAthlete();
     return loadInsightSnapshot(windowDays);
   },
 
@@ -97,7 +97,7 @@ export const violetCoachService = {
    * answer is returned. Nothing is written to the database.
    */
   async ask(question: string): Promise<VioletAnswer> {
-    await requireOwnerAthlete();
+    await requireOwnerOrDemoAthlete();
     const snapshot = await loadInsightSnapshot();
     const intent = intentOf(question);
     const rules = answerFromSnapshot(intent, snapshot);

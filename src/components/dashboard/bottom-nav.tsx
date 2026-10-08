@@ -19,7 +19,9 @@ export function BottomNav({
   const items = NAV_ITEMS.filter((item) =>
     role === "OWNER"
       ? item.bottomNav
-      : (item.bottomNav && !item.ownerOnly) || item.coachBottomNav
+      : role === "DEMO_VIEWER"
+        ? (item.bottomNav && (!item.ownerOnly || item.demoVisible)) || item.coachBottomNav
+        : (item.bottomNav && !item.ownerOnly) || item.coachBottomNav
   );
 
   return (

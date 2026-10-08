@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireOwner } from "@/lib/auth";
+import { requireOwner, requireOwnerOrDemo } from "@/lib/auth";
+import { AuthorizationError, DEMO_READ_ONLY_MESSAGE, isDemoViewer } from "@/lib/rbac";
 import { measurementService } from "@/lib/services/measurement";
 import { exerciseService } from "@/lib/services/exercise";
 import { athleteService } from "@/lib/services/athlete";
@@ -25,7 +26,9 @@ export async function violetInterpretAction(
   text: string
 ): Promise<ActionResult<VioletReply>> {
   return runAction(async () => {
-    await requireOwner();
+    // The demo viewer may ask Violet questions (read-only) but never turn
+    // chat text into records.
+    const viewer = await requireOwnerOrDemo();
     // Untrusted content: flag potential injection for telemetry only. The
     // interpreter never executes instructions — it only extracts data.
     if (detectInjection(text)) {
@@ -58,6 +61,8 @@ export async function violetInterpretAction(
         };
       }
     }
+
+    if (isDemoViewer(viewer.role)) throw new AuthorizationError(DEMO_READ_ONLY_MESSAGE);
 
     const [types, exercises, profile] = await Promise.all([
       measurementService.listTypes(),

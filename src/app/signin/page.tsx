@@ -43,7 +43,7 @@ function SignInCard() {
         router.push(callbackUrl);
         router.refresh();
       } else {
-        setError("Invalid email or password.");
+        setError("Invalid username or password.");
       }
     });
   }
@@ -62,12 +62,13 @@ function SignInCard() {
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Email or username</Label>
             <Input
               id="email"
               name="email"
-              type="email"
+              type="text"
               autoComplete="username"
+              autoCapitalize="none"
               required
               placeholder="you@example.com"
             />

@@ -4,12 +4,32 @@
 export const ROLES = {
   OWNER: "OWNER",
   COACH: "COACH",
+  /**
+   * Prototype showcase account. Reads its own fictional athlete like an owner
+   * would, but can NEVER write: every mutation is owner-only and refused with
+   * DEMO_READ_ONLY_MESSAGE.
+   */
+  DEMO_VIEWER: "DEMO_VIEWER",
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
 export function isRole(value: unknown): value is Role {
-  return value === ROLES.OWNER || value === ROLES.COACH;
+  return value === ROLES.OWNER || value === ROLES.COACH || value === ROLES.DEMO_VIEWER;
+}
+
+export const DEMO_READ_ONLY_MESSAGE = "Demo mode is read only.";
+
+export function isDemoViewer(role: Role | null | undefined): boolean {
+  return role === ROLES.DEMO_VIEWER;
+}
+
+/**
+ * Roles that see the athlete's own (owner) experience, including private areas
+ * such as nutrition. Writes are separate: see canWrite.
+ */
+export function showsOwnerUi(role: Role | null | undefined): boolean {
+  return role === ROLES.OWNER || role === ROLES.DEMO_VIEWER;
 }
 
 /**

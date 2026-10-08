@@ -5,10 +5,11 @@ import { aiProviderLabel } from "@/ai/client";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { VioletChat } from "@/components/ai/violet-chat";
 import { PATIENT_LABEL } from "@/lib/constants";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function CoachPage() {
   const viewer = await requireAuth();
-  if (viewer.role !== "OWNER") redirect("/dashboard");
+  if (!showsOwnerUi(viewer.role)) redirect("/dashboard");
 
   return (
     <div className="space-y-6">

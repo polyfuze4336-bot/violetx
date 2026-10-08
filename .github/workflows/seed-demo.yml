@@ -1,0 +1,78 @@
+name: Seed demo account (prototype)
+
+# MANUAL, one-off, PROTOTYPE ONLY. Creates or refreshes the read-only demo
+# account ("demo") and its fictional history in the database, optionally
+# switching the demo login on for the App Service. Never runs automatically.
+#
+# The demo credentials are public by design. Do not use this for a real
+# production deployment. Re-running is safe (idempotent); it only touches the
+# demo athlete's rows.
+#
+# Required secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+# AZURE_WEBAPP_NAME, DATABASE_URL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "seed-demo" to confirm this is a prototype/demo environment'
+        required: true
+      enable_demo_login:
+        description: Set DEMO_MODE_ENABLED=true on the App Service
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  seed:
+    name: Seed demo data
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ inputs.confirm == 'seed-demo' }}
+    env:
+      AZURE_RESOURCE_GROUP: rg-violetx
+      AZURE_SQL_SERVER: violetx-sql-v6s4btstixeoe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SQL firewall for runner
+        run: |
+          set -e
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          az sql server firewall-rule create -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" -o none
+
+      - name: Seed demo account and data
+        run: npm run seed:demo
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALLOW_DEMO_SEED: "true"
+
+      - name: Enable the demo login on the App Service
+        if: ${{ inputs.enable_demo_login }}
+        run: az webapp config appsettings set -g "$AZURE_RESOURCE_GROUP" -n "${{ secrets.AZURE_WEBAPP_NAME }}" --settings DEMO_MODE_ENABLED=true -o none
+
+      - name: Close SQL firewall for runner
+        if: always()
+        run: az sql server firewall-rule delete -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" -o none || true
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true

@@ -1,3 +1,4 @@
+import { showsOwnerUi } from "@/lib/rbac";
 import { checkInRepository } from "@/lib/repositories/goal";
 import { exerciseEntryRepository } from "@/lib/repositories/exercise";
 import { requireOwnerAthlete, requireViewerAthlete } from "@/lib/services/context";
@@ -90,7 +91,7 @@ export const checkInService = {
   /** Recent check-ins, with an explanation for the check-in dated `todayIso`. */
   async overview(todayIso: string, days = 30): Promise<RecoveryOverviewDTO> {
     const { athleteId, actor } = await requireViewerAthlete();
-    const isOwner = actor.role === "OWNER";
+    const isOwner = showsOwnerUi(actor.role);
     const today = new Date(`${todayIso}T00:00:00.000Z`);
     const since = new Date(today.getTime() - days * 86_400_000);
     const rows = await checkInRepository.list(athleteId, since);

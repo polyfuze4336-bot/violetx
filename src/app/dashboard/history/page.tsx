@@ -17,10 +17,11 @@ import { HistoryTimeline } from "@/components/history/history-timeline";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { MonthlyBars } from "@/components/charts/monthly-bars";
 import { PrProgress } from "@/components/records/pr-progress";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function HistoryPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
 
   const [weights, measurements, sets, notes, prEvents] = viewer.athleteId
     ? await Promise.all([

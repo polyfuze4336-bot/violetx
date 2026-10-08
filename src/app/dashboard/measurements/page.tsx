@@ -26,6 +26,7 @@ import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
 import { ConfirmDeleteButton } from "@/components/dashboard/delete-button";
 import { TrendChartCard } from "@/components/charts/trend-chart-card";
 import { MeasurementForm } from "@/components/measurements/measurement-form";
+import { showsOwnerUi } from "@/lib/rbac";
 
 function unitLabel(unit: string) {
   return unit === "INCH" ? "in" : "cm";
@@ -33,7 +34,7 @@ function unitLabel(unit: string) {
 
 export default async function MeasurementsPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
 
   const [types, entries, weights] = viewer.athleteId
     ? await Promise.all([

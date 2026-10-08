@@ -16,10 +16,11 @@ import {
   ExerciseLibrary,
   type ExerciseStats,
 } from "@/components/exercises/exercise-library";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function ExercisesPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
 
   const [exercises, prs] = viewer.athleteId
     ? await Promise.all([

@@ -25,6 +25,7 @@ import { ConfirmDeleteButton } from "@/components/dashboard/delete-button";
 import { ProgressLineChart } from "@/components/charts/line-chart";
 import { SetForm } from "@/components/strength/set-form";
 import type { ExerciseEntryDTO } from "@/lib/dto";
+import { showsOwnerUi } from "@/lib/rbac";
 
 /** Reduce a set list to the heaviest set per date for a progression chart. */
 function maxWeightPerDate(entries: ExerciseEntryDTO[]) {
@@ -43,7 +44,7 @@ function maxWeightPerDate(entries: ExerciseEntryDTO[]) {
 
 export default async function StrengthPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
 
   const [exercises, entries] = viewer.athleteId
     ? await Promise.all([

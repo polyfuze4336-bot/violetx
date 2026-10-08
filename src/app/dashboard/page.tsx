@@ -37,6 +37,7 @@ import { FadeIn } from "@/components/motion/fade-in";
 import { PATIENT_LABEL } from "@/lib/constants";
 import type { MeasurementEntryDTO } from "@/lib/dto";
 import type { PrEventDTO } from "@/lib/services/personalRecord";
+import { showsOwnerUi } from "@/lib/rbac";
 
 const BODY_PROGRESS_ORDER = ["Chest", "Waist", "Hip", "Thigh", "Upper arm"];
 
@@ -58,7 +59,9 @@ interface TimelineItem {
 
 export default async function DashboardOverviewPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
+  // Import is a write flow; the demo viewer cannot use it.
+  const canImport = viewer.role === "OWNER";
 
   if (!viewer.athleteId) {
     return (
@@ -183,12 +186,14 @@ export default async function DashboardOverviewPage() {
               Log weight
             </Link>
           </Button>
-          <Button asChild>
-            <Link href="/dashboard/import">
-              <MessageSquareText className="h-4 w-4" />
-              Import WhatsApp
-            </Link>
-          </Button>
+          {canImport && (
+            <Button asChild>
+              <Link href="/dashboard/import">
+                <MessageSquareText className="h-4 w-4" />
+                Import WhatsApp
+              </Link>
+            </Button>
+          )}
         </div>
       )}
 

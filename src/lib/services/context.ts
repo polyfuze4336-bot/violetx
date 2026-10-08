@@ -1,4 +1,4 @@
-import { requireAuth, requireOwner, type AuthContext } from "@/lib/auth";
+import { requireAuth, requireOwner, requireOwnerOrDemo, type AuthContext } from "@/lib/auth";
 import { NotFoundError } from "@/lib/rbac";
 
 export interface AthleteContext {
@@ -12,6 +12,18 @@ export interface AthleteContext {
  */
 export async function requireOwnerAthlete(): Promise<AthleteContext> {
   const actor = await requireOwner();
+  if (!actor.athleteId) {
+    throw new NotFoundError("No athlete profile is configured.");
+  }
+  return { actor, athleteId: actor.athleteId };
+}
+
+/**
+ * READ-ONLY owner-style access (owner or demo viewer) with an active athlete.
+ * Only for methods that never write, e.g. asking Violet a question.
+ */
+export async function requireOwnerOrDemoAthlete(): Promise<AthleteContext> {
+  const actor = await requireOwnerOrDemo();
   if (!actor.athleteId) {
     throw new NotFoundError("No athlete profile is configured.");
   }

@@ -26,6 +26,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Hidden from coaches (read-only users). */
   ownerOnly?: boolean;
+  /** Owner-only, but its read-only view works for the demo viewer. */
+  demoVisible?: boolean;
   /** Shown in the mobile bottom navigation bar (most common actions). */
   bottomNav?: boolean;
   /** Shown in the bottom bar for coaches only (replaces owner-only slots). */
@@ -60,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
     shortLabel: "Violet",
     icon: Sparkles,
     ownerOnly: true,
+    demoVisible: true,
     bottomNav: true,
   },
   {
@@ -82,6 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Nutrition",
     icon: Salad,
     ownerOnly: true,
+    demoVisible: true,
   },
   { href: "/dashboard/gym", label: "Gym Journey", icon: Map },
   { href: "/dashboard/history", label: "History", icon: History },

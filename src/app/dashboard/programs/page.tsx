@@ -3,10 +3,11 @@ import { exerciseService } from "@/lib/services/exercise";
 import { programService } from "@/lib/services/program";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ProgramsClient } from "@/components/programs/programs-client";
+import { showsOwnerUi } from "@/lib/rbac";
 
 export default async function ProgramsPage() {
   const viewer = await requireAuth();
-  const isOwner = viewer.role === "OWNER";
+  const isOwner = showsOwnerUi(viewer.role);
   const [programs, exercises] = viewer.athleteId
     ? await Promise.all([programService.list(), exerciseService.list()])
     : [[], []];

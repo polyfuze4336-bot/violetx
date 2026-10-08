@@ -8,17 +8,21 @@ import { verifyPassword } from "@/lib/password";
 import {
   AuthenticationError,
   AuthorizationError,
+  DEMO_READ_ONLY_MESSAGE,
   ROLES,
   isRole,
+  showsOwnerUi,
   type Role,
 } from "@/lib/rbac";
+import { demoLoginEmail, isDemoModeEnabled } from "@/lib/demo-mode";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  // An email, or (prototype demo only) a plain username such as "demo".
+  email: z.string().trim().min(1).max(254),
   password: z.string().min(1).max(200),
 });
 
@@ -30,7 +34,8 @@ async function resolveAthleteId(
   userId: string,
   role: Role
 ): Promise<string | null> {
-  if (role === ROLES.OWNER) {
+  // The demo viewer reads its OWN fictional athlete, never the real one.
+  if (role === ROLES.OWNER || role === ROLES.DEMO_VIEWER) {
     const athlete = await prisma.athlete.findUnique({
       where: { ownerUserId: userId },
       select: { id: true },
@@ -60,7 +65,11 @@ export const authOptions: NextAuthOptions = {
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
-        const email = parsed.data.email.trim().toLowerCase();
+        const identifier = parsed.data.email.trim().toLowerCase();
+        const email = identifier.includes("@")
+          ? identifier
+          : demoLoginEmail(identifier);
+        if (!email) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
         // Do not reveal which check failed (avoid user enumeration).
@@ -72,6 +81,8 @@ export const authOptions: NextAuthOptions = {
           user.passwordHash
         );
         if (!ok) {
+          // The demo password is public: never lock the shared account out.
+          if (user.role === ROLES.DEMO_VIEWER) return null;
           const attempts = user.failedLoginAttempts + 1;
           const lockedUntil =
             attempts >= MAX_FAILED_ATTEMPTS
@@ -94,6 +105,8 @@ export const authOptions: NextAuthOptions = {
         });
 
         const role = isRole(user.role) ? user.role : ROLES.COACH;
+        // A demo account only works while demo mode is explicitly enabled.
+        if (role === ROLES.DEMO_VIEWER && !isDemoModeEnabled()) return null;
         const athleteId = await resolveAthleteId(user.id, role);
 
         return {
@@ -158,10 +171,30 @@ export async function requireAuth(): Promise<AuthContext> {
   };
 }
 
-/** Require an authenticated OWNER. Throws AuthorizationError for coaches. */
+/**
+ * Require an authenticated OWNER. Throws AuthorizationError for coaches and a
+ * "Demo mode is read only." error for the demo viewer. Every write path goes
+ * through this (directly or via requireOwnerAthlete), so the demo account can
+ * never mutate data even if a server action is called directly.
+ */
 export async function requireOwner(): Promise<AuthContext> {
   const ctx = await requireAuth();
+  if (ctx.role === ROLES.DEMO_VIEWER) {
+    throw new AuthorizationError(DEMO_READ_ONLY_MESSAGE);
+  }
   if (ctx.role !== ROLES.OWNER) {
+    throw new AuthorizationError();
+  }
+  return ctx;
+}
+
+/**
+ * For READ-ONLY owner experiences (e.g. asking Violet a question): the owner
+ * or the demo viewer. Must never be used by a method that writes.
+ */
+export async function requireOwnerOrDemo(): Promise<AuthContext> {
+  const ctx = await requireAuth();
+  if (!showsOwnerUi(ctx.role)) {
     throw new AuthorizationError();
   }
   return ctx;
