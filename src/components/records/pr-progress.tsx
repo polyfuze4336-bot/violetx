@@ -26,7 +26,7 @@ interface DotProps {
 /** Per-exercise progression with a gold marker on every new weight PR. */
 export function PrProgress({ series }: { series: ExerciseSeries[] }) {
   const gradId = useId().replace(/:/g, "");
-  const choices = useMemo(() => series.slice(0, 8), [series]);
+  const choices = useMemo(() => series.slice(0, 12), [series]);
   const [selectedId, setSelectedId] = useState(choices[0]?.exerciseId);
   const [metric, setMetric] = useState<Metric>("maxWeightKg");
 
