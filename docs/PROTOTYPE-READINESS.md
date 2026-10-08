@@ -10,7 +10,7 @@ Final end-to-end validation. Production: `https://violetx-web-v6s4btstixeoe.azur
 |---|---|
 | `npm run lint` | PASS (0 warnings/errors) |
 | `npx tsc --noEmit` | PASS |
-| `npx vitest run` | PASS — 496 tests, 37 files |
+| `npx vitest run` | PASS — 499 tests, 38 files |
 | `npm run build` | PASS |
 | CI + "Deploy to Azure App Service" | PASS (green) |
 
@@ -42,12 +42,13 @@ Final end-to-end validation. Production: `https://violetx-web-v6s4btstixeoe.azur
 2. **Transient HTTP 500 on first load** after demo sign-in / after a deploy — database retry only looked at `error.code`; Prisma initialisation errors use `errorCode`, and connection-lost errors were not retried for reads (`db.ts`). Likely cause: Azure SQL serverless auto-pause.
 3. **Strength page** — rendered ~1100 set rows (1100+ buttons) and charted assisted lifts inverted ("max assistance = best"). Now capped to latest 100 rows and assisted-aware (`reverseY` axis, "Lower assistance = stronger").
 4. **Assisted wording missing** on Dashboard home (recent sets, recent PR card, timeline), History timeline sets and Compare page (which treated *more* assistance as a larger "increase"). `ExerciseEntryDTO` now carries an `assisted` flag.
-5. **Records chips** showed only the 8 most-trained lifts, hiding Bench Press in the demo; raised to 12.
+5. **Database connection-pool stall (found in production smoke testing)** — after a restart, Azure SQL (serverless) reset some connections (Prisma `P1011` TLS/"Connection reset") and the default 3-connection pool then timed out (`P2024`) for every request: demo sign-in hung and DB pages returned 500 until the app restarted. `db.ts` now retries `P1011` for all operations, uses a 10-connection pool with a 30 s pool timeout, and rebuilds a pool that keeps timing out. The unit tests cover the connection-string tuning; the self-heal path itself can only be exercised against a real paused database.
+6. **Records chips** showed only the 8 most-trained lifts, hiding Bench Press in the demo; raised to 12.
 
 ## Known limitations
 
 - Owner write flow verified in-memory, not on production data.
-- The 500-on-first-load mitigation (bug 2) is unit-verified but cannot be forced in production (needs the DB to pause); watch Application Insights after an idle period.
+- The database retry/pool hardening (bugs 2 and 5) cannot be forced in production (it needs the DB to pause and reset connections); the pool stall was observed once during validation and cleared by an app restart. Watch the first request after an idle period.
 - Volume PR appears in the workout-finish summary only.
 - Local `az` has no access to the production subscription, so server logs/App Insights were not queried; the browser console and HTTP status were used instead.
 - Demo credentials (`demo` / `violetx`) are for the prototype only and are gated by `DEMO_MODE_ENABLED`.

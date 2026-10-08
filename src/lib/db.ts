@@ -4,8 +4,9 @@ import { PrismaClient } from "@prisma/client";
 // fails with P1001 while it resumes. Retry those (the statement never ran, so
 // retrying is safe) instead of surfacing "something went wrong".
 const RETRY_DELAYS_MS = [2000, 4000, 8000, 16000];
-// Never reached the server: the statement cannot have run, so any operation may be retried.
-const NOT_REACHED_CODES = new Set(["P1001", "P1002"]);
+// Never reached the server (cannot connect / connection reset during the TLS
+// handshake): the statement cannot have run, so any operation may be retried.
+const NOT_REACHED_CODES = new Set(["P1001", "P1002", "P1011"]);
 // The connection dropped or timed out mid-flight (also common while the database
 // wakes up). The statement MAY have run, so only read operations are retried.
 const CONNECTION_LOST_CODES = new Set(["P1008", "P1017", "P2024"]);
@@ -28,17 +29,29 @@ function isDatabaseUnreachable(error: unknown, operation: string): boolean {
   return Boolean(code && CONNECTION_LOST_CODES.has(code) && READ_OPERATIONS.has(operation));
 }
 
-/** Give a resuming serverless database time to answer (seconds). */
-function databaseUrl(): string | undefined {
-  const url = process.env.DATABASE_URL;
+/**
+ * Connection string tuning for Azure SQL serverless: give a resuming database
+ * time to answer, and keep the pool large enough (Prisma's default is only
+ * 2 x CPUs + 1 = 3 on this plan) that a few slow connections cannot starve
+ * every request into "Timed out fetching a new connection from the pool".
+ */
+export function tuneDatabaseUrl(connectionString: string | undefined): string | undefined {
+  let url = connectionString;
   if (!url || !url.startsWith("sqlserver://")) return url;
-  if (/(^|;)\s*(connectionTimeout|connectTimeout)\s*=/i.test(url)) return url;
-  return `${url.replace(/;?$/, ";")}connectionTimeout=60`;
+  const add = (pattern: RegExp, setting: string) => {
+    if (!pattern.test(url as string)) url = `${(url as string).replace(/;?$/, ";")}${setting}`;
+  };
+  add(/(^|;)\s*(connectionTimeout|connectTimeout)\s*=/i, "connectionTimeout=60");
+  add(/(^|;)\s*(connectionLimit|connection_limit)\s*=/i, "connectionLimit=10");
+  add(/(^|;)\s*(poolTimeout|pool_timeout)\s*=/i, "poolTimeout=30");
+  return url;
 }
+
+let lastPoolReset = 0;
 
 function createClient() {
   const base = new PrismaClient({
-    datasourceUrl: databaseUrl(),
+    datasourceUrl: tuneDatabaseUrl(process.env.DATABASE_URL),
     log:
       process.env.NODE_ENV === "development"
         ? ["error", "warn"]
@@ -53,6 +66,12 @@ function createClient() {
           } catch (error) {
             if (attempt >= RETRY_DELAYS_MS.length || !isDatabaseUnreachable(error, operation)) {
               throw error;
+            }
+            // A pool that keeps timing out (e.g. connections dropped by a database that
+            // was paused) is rebuilt; Prisma reconnects lazily on the next query.
+            if (failureCode(error) === "P2024" && attempt >= 1 && Date.now() - lastPoolReset > 20_000) {
+              lastPoolReset = Date.now();
+              await base.$disconnect().catch(() => undefined);
             }
             await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
           }
