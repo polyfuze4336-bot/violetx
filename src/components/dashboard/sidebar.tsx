@@ -4,37 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/components/dashboard/nav-config";
+import { primaryNavFor, sectionOf } from "@/components/dashboard/nav-config";
 import { LogoWordmark } from "@/components/brand/logo";
 import type { Role } from "@/lib/rbac";
 
-export function SidebarNav({
-  role,
-  onNavigate,
-}: {
-  role: Role;
-  onNavigate?: () => void;
-}) {
+/** Desktop sidebar: the primary destinations only. Everything else is under More. */
+export function SidebarNav({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter(
-    (item) =>
-      !item.ownerOnly ||
-      role === "OWNER" ||
-      (role === "DEMO_VIEWER" && item.demoVisible)
-  );
+  const current = sectionOf(pathname);
 
   return (
-    <nav className="flex flex-col gap-1">
-      {items.map((item) => {
-        const active =
-          item.href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname.startsWith(item.href);
+    <nav aria-label="Primary" className="flex flex-col gap-1">
+      {primaryNavFor(role).map((item) => {
+        const active = item.key === current;
         return (
           <Link
-            key={item.href}
+            key={item.key}
             href={item.href}
-            onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
               "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
@@ -69,4 +55,3 @@ export function SidebarBrand() {
     </Link>
   );
 }
-

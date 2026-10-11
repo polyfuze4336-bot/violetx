@@ -1,45 +1,34 @@
 import Link from "next/link";
-import {
-  ArrowDownRight,
-  ArrowRight,
-  ArrowUpRight,
-  Dumbbell,
-  MessageSquareText,
-  Ruler,
-  Sparkles,
-  Trophy,
-  Weight,
-} from "lucide-react";
+import { ArrowRight, Dumbbell, MessageSquareText, Play, Sparkles, Target, Trophy, Weight } from "lucide-react";
 
 import { requireAuth } from "@/lib/auth";
 import { bodyWeightService } from "@/lib/services/bodyWeight";
-import { measurementService } from "@/lib/services/measurement";
-import { exerciseService, exerciseEntryService } from "@/lib/services/exercise";
+import { checkInService } from "@/lib/services/checkin";
+import { gymService } from "@/lib/services/gym";
 import { personalRecordService } from "@/lib/services/personalRecord";
+import { programService } from "@/lib/services/program";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
-import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
-import { HomeHero } from "@/components/dashboard/home-hero";
-import { Sparkline } from "@/components/charts/sparkline";
-import { computeSeriesStats, prEventDetail, type SeriesStats } from "@/lib/analytics";
-import {
-  formatDate,
-  formatDelta,
-  formatMeasurement,
-  formatNumber,
-} from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/dashboard/page-header";
-import { EmptyState } from "@/components/dashboard/empty-state";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
-import { FadeIn } from "@/components/motion/fade-in";
+import { weeklyReviewService } from "@/lib/services/weeklyReview";
+import { workoutService } from "@/lib/services/workout";
+import { analyticsService } from "@/lib/services/analytics";
+import { todayIso } from "@/lib/dates";
+import { prEventDetail } from "@/lib/analytics";
+import { progressInsight } from "@/lib/violet-insights";
+import { focusMessage, staleRecordFocus, type FocusItem } from "@/lib/pr-focus";
+import { formatDate, formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { PATIENT_LABEL } from "@/lib/constants";
-import type { MeasurementEntryDTO } from "@/lib/dto";
-import type { PrEventDTO } from "@/lib/services/personalRecord";
 import { showsOwnerUi } from "@/lib/rbac";
-
-const BODY_PROGRESS_ORDER = ["Chest", "Waist", "Hip", "Thigh", "Upper arm"];
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { ImportWorkoutButton } from "@/components/dashboard/import-cta";
+import { TodayCard } from "@/components/programs/today-card";
+import { FadeIn } from "@/components/motion/fade-in";
+import type { PrEventDTO } from "@/lib/services/personalRecord";
+import type { ExerciseProgress } from "@/lib/training-analytics";
+import type { WorkoutListItemDTO } from "@/lib/services/workout";
 
 function greeting(date = new Date()): string {
   const h = date.getHours();
@@ -48,20 +37,18 @@ function greeting(date = new Date()): string {
   return "Good evening";
 }
 
-interface TimelineItem {
-  date: string;
-  icon: "pr" | "weight" | "measurement";
-  title: string;
-  value: string;
-  change: string | null;
-  direction: "up" | "down" | "flat";
-}
+const caption = "flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground";
 
+/**
+ * Home: the gym-progress command centre. Priority order: today's workout, the
+ * latest PR, strength trend, the latest WhatsApp import, this week, Violet.
+ * Body, recovery and the gym map are one compact row at the bottom.
+ */
 export default async function DashboardOverviewPage() {
   const viewer = await requireAuth();
-  const isOwner = showsOwnerUi(viewer.role);
-  // Import is a write flow; the demo viewer cannot use it.
-  const canImport = viewer.role === "OWNER";
+  const showsOwner = showsOwnerUi(viewer.role);
+  // Start workout / import are write flows: the athlete only.
+  const canAct = viewer.role === "OWNER";
 
   if (!viewer.athleteId) {
     return (
@@ -76,86 +63,30 @@ export default async function DashboardOverviewPage() {
     );
   }
 
-  const [weights, measurements, exercises, prEvents, recentSets] =
-    await Promise.all([
-      bodyWeightService.list(),
-      measurementService.listEntries(),
-      exerciseService.list(),
-      personalRecordService.prEvents(),
-      exerciseEntryService.list({ take: 6 }),
-    ]);
+  const today = todayIso();
+  const [todayWorkout, prEvents, training, week, sessions, analytics, weights, recovery, journey] = await Promise.all([
+    programService.today(),
+    personalRecordService.prEvents(),
+    trainingProgressService.get("week"),
+    weeklyReviewService.get(today),
+    workoutService.listSessions(40, { includeIncomplete: true }),
+    analyticsService.get("3M"),
+    bodyWeightService.list(),
+    checkInService.overview(today, 30),
+    gymService.getJourney().catch(() => null),
+  ]);
 
-  const training = await trainingProgressService.history();
-
-  // Most recent activity date across all record types.
-  const lastUpdatedIso = [
-    weights[weights.length - 1]?.date,
-    measurements[measurements.length - 1]?.date,
-    recentSets[0]?.date,
-  ]
-    .filter((d): d is string => Boolean(d))
-    .sort()
-    .pop();
-
-  // Weight stats (points are ascending by date).
-  const weightStats = computeSeriesStats(
-    weights.map((w) => ({ date: w.date, value: w.weightKg }))
-  );
-
-  // Measurements grouped by type name (entries are ascending by date).
-  const seriesByName = new Map<
-    string,
-    { unit: string; entries: MeasurementEntryDTO[] }
-  >();
-  for (const e of measurements) {
-    const g = seriesByName.get(e.typeName) ?? { unit: e.unit, entries: [] };
-    g.unit = e.unit;
-    g.entries.push(e);
-    seriesByName.set(e.typeName, g);
-  }
-  const statsByName = new Map<
-    string,
-    { unit: string; stats: SeriesStats; latest: MeasurementEntryDTO }
-  >();
-  for (const [name, g] of Array.from(seriesByName.entries())) {
-    const stats = computeSeriesStats(
-      g.entries.map((e) => ({ date: e.date, value: e.value }))
-    );
-    if (stats) {
-      statsByName.set(name, {
-        unit: g.unit,
-        stats,
-        latest: g.entries[g.entries.length - 1],
-      });
-    }
-  }
-
-  const waist = findByName(statsByName, "waist");
-
-  // Strength summary.
-  const now = new Date();
-  const thisMonthEvents = prEvents.filter((e) => {
-    const d = new Date(e.date);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-  const improvedThisMonth = new Set(thisMonthEvents.map((e) => e.exerciseId))
-    .size;
-  const recentPR = prEvents[0] ?? null;
-
-  const bodyProgress = BODY_PROGRESS_ORDER.map((name) => {
-    const hit = findByName(statsByName, name.toLowerCase());
-    return hit ? { name, ...hit } : null;
-  }).filter((x): x is NonNullable<typeof x> => x !== null);
-
-  const timeline = buildTimeline(weights, measurements, prEvents).slice(0, 8);
-
-  const hasData = weights.length > 0 || measurements.length > 0 ||
-    exercises.length > 0;
+  const latestPr = prEvents[0] ?? null;
+  const focus = staleRecordFocus(training.series, prEvents);
+  const latestImport = sessions.find((s) => s.fromWhatsApp) ?? null;
+  const insight = progressInsight(analytics.e1rmTrends, analytics.consistency.pct);
+  const lastWeight = weights[weights.length - 1];
+  const hasData = prEvents.length > 0 || training.exercises.length > 0 || sessions.length > 0 || weights.length > 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        {isOwner ? (
+        {showsOwner ? (
           <>
             <p className="text-sm font-medium text-muted-foreground">
               {greeting()}, {PATIENT_LABEL}
@@ -167,448 +98,276 @@ export default async function DashboardOverviewPage() {
         ) : (
           <>
             <h1 className="text-3xl font-bold tracking-tight">{PATIENT_LABEL}</h1>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">
-              Progress Overview
-              {lastUpdatedIso &&
-                ` · Last updated ${formatDate(lastUpdatedIso)}`}
-            </p>
+            <p className="mt-1 text-sm font-medium text-muted-foreground">Progress overview</p>
           </>
         )}
       </div>
 
-      <HomeHero isOwner={isOwner} />
-
-      {isOwner && (
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link href="/dashboard/weight">
-              <Weight className="h-4 w-4" />
-              Log weight
+      {canAct && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Button asChild className="h-14 text-base font-semibold">
+            <Link href="/dashboard/workout">
+              <Play className="h-5 w-5" /> Start workout
             </Link>
           </Button>
-          {canImport && (
-            <Button asChild>
-              <Link href="/dashboard/import">
-                <MessageSquareText className="h-4 w-4" />
-                Import WhatsApp
-              </Link>
-            </Button>
-          )}
+          <Button asChild variant="outline" className="h-14 text-base font-semibold">
+            <Link href="/dashboard/import">
+              <MessageSquareText className="h-5 w-5" /> Import WhatsApp
+            </Link>
+          </Button>
         </div>
       )}
 
       {!hasData ? (
         <EmptyState
-          icon={Weight}
-          title={isOwner ? "No data yet" : "No progress recorded yet"}
+          icon={Dumbbell}
+          title={showsOwner ? "No training recorded yet" : "No progress recorded yet"}
           description={
-            isOwner
-              ? "Import your first WhatsApp update, or add a weigh-in to get started."
+            showsOwner
+              ? "Start a workout, or import a WhatsApp update to record your first PRs."
               : "The athlete's progress will appear here once they add data."
           }
-          action={isOwner ? <ImportWorkoutButton label="Import Update" /> : undefined}
+          action={canAct ? <ImportWorkoutButton label="Import WhatsApp" /> : undefined}
         />
       ) : (
-        <>
-          <FadeIn>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                label="Current weight"
-                value={weightStats ? formatNumber(weightStats.latest) : "—"}
-                unit={weightStats ? "kg" : undefined}
-                hint={
-                  weightStats
-                    ? weightStats.count > 1
-                      ? `${formatDelta(weightStats.deltaPrev)} kg${
-                          weightStats.pctPrev !== null
-                            ? ` (${formatDelta(weightStats.pctPrev)}%)`
-                            : ""
-                        } · ${formatDate(weights[weights.length - 1].date)}`
-                      : formatDate(weights[weights.length - 1].date)
-                    : undefined
-                }
-                trend={
-                  weightStats && weightStats.deltaPrev < 0
-                    ? "up"
-                    : weightStats && weightStats.deltaPrev > 0
-                    ? "down"
-                    : "neutral"
-                }
-                icon={Weight}
-                accent="primary"
-              />
-
-              {waist ? (
-                <StatCard
-                  label="Waist"
-                  value={formatNumber(waist.stats.latest)}
-                  unit={waist.unit === "INCH" ? "in" : "cm"}
-                  hint={`${formatDelta(waist.stats.deltaStart)} since start · ${formatDelta(
-                    waist.stats.deltaPrev
-                  )} since last`}
-                  trend={waist.stats.deltaStart < 0 ? "up" : "down"}
-                  icon={Ruler}
-                  accent="primary"
-                />
+        <FadeIn>
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+              {todayWorkout ? (
+                <TodayCard today={todayWorkout} canStart={canAct} />
               ) : (
-                <StatCard
-                  label="Measurements"
-                  value={String(statsByName.size)}
-                  hint="types tracked"
-                  icon={Ruler}
-                  accent="primary"
-                />
+                <Card className="flex flex-col justify-between gap-3 p-5">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Today</p>
+                    <h2 className="mt-1 text-2xl font-bold tracking-tight">{showsOwner ? "Ready when you are" : "No workout planned"}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {showsOwner ? "Start a workout or pick a program." : "Nothing scheduled from the active program."}
+                    </p>
+                  </div>
+                  {canAct && (
+                    <Button asChild variant="outline" className="w-fit">
+                      <Link href="/dashboard/programs">Programs</Link>
+                    </Button>
+                  )}
+                </Card>
               )}
+              <LatestPrCard pr={latestPr} />
+            </div>
 
-              <StatCard
-                label="Exercises tracked"
-                value={String(exercises.length)}
-                icon={Dumbbell}
-                accent="success"
-              />
-              <StatCard
-                label="PRs this month"
-                value={String(thisMonthEvents.length)}
-                hint={`${improvedThisMonth} exercise${
-                  improvedThisMonth === 1 ? "" : "s"
-                } improved`}
-                icon={Trophy}
-                accent="magenta"
+            {focus.length > 0 && <FocusCard items={focus} />}
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <StrengthTrendCard exercises={training.exercises} />
+              <WeekCard
+                workouts={week.training.workouts}
+                planned={week.consistency.planned}
+                progressUpdates={week.training.progressUpdates}
+                prs={week.strength.prs.length}
               />
             </div>
-          </FadeIn>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">Training activity</CardTitle>
-              <Link
-                href="/dashboard/progress"
-                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-              >
-                Training progress <ArrowRight className="h-4 w-4" />
-              </Link>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-[1fr_16rem] md:items-center">
-              <ActivityHeatmap perDay={training.perDay} weeks={20} />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Volume · 12 months</p>
-                <Sparkline values={training.months.map((m) => m.volumeKg)} height={64} />
-              </div>
-            </CardContent>
-          </Card>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <RecentPrCard pr={recentPR} />
-            <BodyProgressCard items={bodyProgress} />
-            <StrengthProgressCard
-              improvedThisMonth={improvedThisMonth}
-              recentPrs={thisMonthEvents.length}
-              totalExercises={exercises.length}
-            />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Progress timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {timeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Changes will appear here as you log data.
-                  </p>
-                ) : (
-                  <ol className="space-y-4">
-                    {timeline.map((item, i) => (
-                      <TimelineRow key={i} item={item} />
-                    ))}
-                  </ol>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base">Recent training</CardTitle>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <LatestImportCard item={latestImport} canImport={canAct} />
+              <Card className="space-y-2 border-primary/30 bg-primary/5 p-5">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
+                  <Sparkles className="h-3.5 w-3.5" /> Violet
+                </p>
+                <p className="text-base font-medium">
+                  {insight ?? "Keep recording your lifts. Violet needs a few more recorded sessions to spot a trend."}
+                </p>
                 <Link
-                  href="/dashboard/history"
-                  className="text-sm font-medium text-primary hover:underline"
+                  href={showsOwner ? "/dashboard/coach" : "/dashboard/review"}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                 >
-                  View all
+                  {showsOwner ? "Ask Violet" : "Weekly review"} <ArrowRight className="h-4 w-4" />
                 </Link>
-              </CardHeader>
-              <CardContent>
-                {recentSets.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No workouts recorded yet.
-                  </p>
-                ) : (
-                  <ul className="space-y-3">
-                    {recentSets.map((s) => (
-                      <li
-                        key={s.id}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <div>
-                          <p className="font-medium">{s.exerciseName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(s.date)}
-                          </p>
-                        </div>
-                        <span className="font-semibold tabular-nums">
-                          {s.weightKg}kg{s.assisted ? " assistance" : ""} × {s.reps}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <MiniLink href="/dashboard/weight" label="Body weight">
+                {lastWeight ? `${formatNumber(lastWeight.weightKg)} kg` : "No weigh-ins"}
+              </MiniLink>
+              <MiniLink href="/dashboard/recovery" label="Recovery">
+                {recovery.today?.readiness ? `${recovery.today.readiness.score}/100` : "Check in"}
+              </MiniLink>
+              <MiniLink href="/dashboard/gym" label="Gym journey">
+                {journey?.stats.uniqueVisited ?? 0} gym{journey?.stats.uniqueVisited === 1 ? "" : "s"}
+              </MiniLink>
+            </div>
           </div>
-        </>
+        </FadeIn>
       )}
     </div>
   );
 }
 
-function findByName<T>(map: Map<string, T>, lowerName: string): T | undefined {
-  for (const [name, value] of Array.from(map.entries())) {
-    if (name.toLowerCase() === lowerName) return value;
-  }
-  return undefined;
-}
-
-function RecentPrCard({ pr }: { pr: PrEventDTO | null }) {
+function MiniLink({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
   return (
-    <Card className="relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-1 bg-brand-gradient" />
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="h-4 w-4 text-magenta" />
-          Recent PR
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {pr ? (
-          <div className="space-y-1">
-            <p className="text-lg font-semibold">{pr.exerciseName}</p>
-            <p className="text-2xl font-bold tabular-nums">
-              {formatNumber(pr.weightKg)} kg{pr.assisted ? " assistance" : ""} × {pr.reps} reps
-            </p>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                {prEventDetail(pr).label.toUpperCase()}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {formatDate(pr.date)}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No personal records yet. Log a few sets to start tracking PRs.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <Link href={href}>
+      <Card className="h-full space-y-0.5 p-3 transition-shadow hover:shadow-md">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold tabular-nums">{children}</p>
+      </Card>
+    </Link>
   );
 }
 
-function BodyProgressCard({
-  items,
-}: {
-  items: Array<{ name: string; unit: string; stats: SeriesStats }>;
-}) {
+/** Reminder: the lift that has gone longest without a PR (recorded data only). */
+function FocusCard({ items }: { items: FocusItem[] }) {
+  const [top, ...rest] = items;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Body progress</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No measurements recorded yet.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {items.map((it) => (
-              <li
-                key={it.name}
-                className="flex items-center justify-between text-sm"
-              >
-                <span className="text-muted-foreground">{it.name}</span>
-                <span className="flex items-center gap-2">
-                  <span className="font-semibold tabular-nums">
-                    {formatMeasurement(it.stats.latest, it.unit)}
-                  </span>
-                  {it.stats.count > 1 && (
-                    <span
-                      className={
-                        it.stats.deltaStart < 0
-                          ? "text-xs font-medium text-success"
-                          : it.stats.deltaStart > 0
-                          ? "text-xs font-medium text-magenta"
-                          : "text-xs text-muted-foreground"
-                      }
-                    >
-                      {formatDelta(it.stats.deltaStart)}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function StrengthProgressCard({
-  improvedThisMonth,
-  recentPrs,
-  totalExercises,
-}: {
-  improvedThisMonth: number;
-  recentPrs: number;
-  totalExercises: number;
-}) {
-  const rows = [
-    { label: "Improved this month", value: improvedThisMonth },
-    { label: "Recent PRs", value: recentPrs },
-    { label: "Total exercises", value: totalExercises },
-  ];
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Strength progress</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-3">
-          {rows.map((r) => (
-            <li
-              key={r.label}
-              className="flex items-center justify-between text-sm"
-            >
-              <span className="text-muted-foreground">{r.label}</span>
-              <span className="text-lg font-bold tabular-nums">{r.value}</span>
+    <Card className="space-y-3 border-magenta/30 bg-magenta/5 p-5">
+      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-magenta">
+        <Target className="h-3.5 w-3.5" /> Focus next
+      </p>
+      <div className="space-y-1">
+        <Link href={`/dashboard/exercises/${top.exerciseId}`} className="text-lg font-semibold hover:underline">
+          {top.name}
+        </Link>
+        <p className="text-sm text-muted-foreground">{focusMessage(top)}</p>
+      </div>
+      {rest.length > 0 && (
+        <ul className="space-y-1 border-t pt-3 text-sm">
+          {rest.map((f) => (
+            <li key={f.exerciseId} className="flex items-center justify-between gap-3">
+              <Link href={`/dashboard/exercises/${f.exerciseId}`} className="truncate font-medium hover:underline">
+                {f.name}
+              </Link>
+              <span className="shrink-0 text-xs text-muted-foreground">{f.daysSincePr} days without a PR</span>
             </li>
           ))}
         </ul>
-      </CardContent>
+      )}
+      <p className="text-[11px] text-muted-foreground">Based on your recorded sessions only.</p>
     </Card>
   );
 }
 
-function TimelineRow({ item }: { item: TimelineItem }) {
-  const Icon =
-    item.direction === "down"
-      ? ArrowDownRight
-      : item.direction === "up"
-      ? ArrowUpRight
-      : ArrowRight;
-  const accent =
-    item.icon === "pr"
-      ? "bg-magenta/10 text-magenta"
-      : item.icon === "weight"
-      ? "bg-primary/10 text-primary"
-      : "bg-chart-5/10 text-chart-5";
+function LatestPrCard({ pr }: { pr: PrEventDTO | null }) {
+  const d = pr ? prEventDetail(pr) : null;
   return (
-    <li className="flex gap-3">
-      <div
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${accent}`}
-      >
-        {item.icon === "pr" ? (
-          <Trophy className="h-4 w-4" />
-        ) : item.icon === "weight" ? (
-          <Weight className="h-4 w-4" />
-        ) : (
-          <Ruler className="h-4 w-4" />
-        )}
-      </div>
-      <div className="flex-1 border-b pb-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">{item.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatDate(item.date)}
+    <Card className="relative overflow-hidden p-5">
+      <div className="absolute inset-x-0 top-0 h-1 bg-brand-gradient" />
+      <p className={caption}>
+        <Trophy className="h-3.5 w-3.5 text-magenta" /> Latest PR
+      </p>
+      {pr && d ? (
+        <div className="mt-2 space-y-1">
+          <p className="text-lg font-semibold">{pr.exerciseName}</p>
+          <p className="text-3xl font-bold tabular-nums">
+            {formatNumber(pr.weightKg)} kg{pr.assisted ? " assistance" : ""} × {pr.reps}
           </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">🏆 {d.label.toUpperCase()}</span>
+            <span className="text-xs font-medium">{d.detail}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">{formatDate(pr.date)}</p>
         </div>
-        <div className="mt-0.5 flex items-center gap-2">
-          <p className="text-sm tabular-nums">{item.value}</p>
-          {item.change && (
-            <span
-              className={
-                item.direction === "down"
-                  ? "flex items-center text-xs font-medium text-success"
-                  : item.direction === "up"
-                  ? "flex items-center text-xs font-medium text-magenta"
-                  : "flex items-center text-xs text-muted-foreground"
-              }
-            >
-              <Icon className="h-3 w-3" />
-              {item.change}
-            </span>
-          )}
-        </div>
-      </div>
-    </li>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">No personal records yet. Record a few lifts to start tracking PRs.</p>
+      )}
+    </Card>
   );
 }
 
-function buildTimeline(
-  weights: { date: string; weightKg: number }[],
-  measurements: MeasurementEntryDTO[],
-  prEvents: PrEventDTO[]
-): TimelineItem[] {
-  const items: TimelineItem[] = [];
+const TREND: Record<ExerciseProgress["status"], { icon: string; tone: string; label: string } | null> = {
+  progressing: { icon: "↑", tone: "text-success", label: "Improving" },
+  stalled: { icon: "→", tone: "text-muted-foreground", label: "Steady" },
+  regressing: { icon: "↓", tone: "text-magenta", label: "Down" },
+  new: { icon: "•", tone: "text-primary", label: "New" },
+  inactive: null,
+};
 
-  // PR events.
-  for (const e of prEvents) {
-    items.push({
-      date: e.date,
-      icon: "pr",
-      title: e.exerciseName,
-      value: `${formatNumber(e.weightKg)}kg${e.assisted ? " assistance" : ""} × ${e.reps} reps`,
-      change: e.type === "WEIGHT" ? "New maximum weight" : e.type === "ASSISTANCE" ? "Less assistance" : "New rep record",
-      direction: "flat",
-    });
-  }
+function StrengthTrendCard({ exercises }: { exercises: ExerciseProgress[] }) {
+  const rows = exercises
+    .filter((e) => TREND[e.status])
+    .sort((a, b) => b.lastPerformed.localeCompare(a.lastPerformed))
+    .slice(0, 6);
+  return (
+    <Card className="space-y-3 p-5">
+      <div className="flex items-center justify-between">
+        <p className={caption}>
+          <Dumbbell className="h-3.5 w-3.5 text-primary" /> Strength trend
+        </p>
+        <Link href="/dashboard/strength" className="text-xs font-medium text-primary hover:underline">
+          All exercises
+        </Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Trends appear after a few recorded sessions of an exercise.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((e) => {
+            const t = TREND[e.status]!;
+            return (
+              <li key={e.exerciseId} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate font-medium">{e.name}</span>
+                <span className={cn("flex items-center gap-1.5 font-semibold", t.tone)} title={t.label}>
+                  <span className="text-xs font-normal">{t.label}</span>
+                  <span className="w-4 text-center text-base leading-none">{t.icon}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="text-[11px] text-muted-foreground">Based on your recorded sessions. Lower assistance counts as stronger.</p>
+    </Card>
+  );
+}
 
-  // Weight changes (vs previous weigh-in).
-  for (let i = 1; i < weights.length; i++) {
-    const delta = weights[i].weightKg - weights[i - 1].weightKg;
-    items.push({
-      date: weights[i].date,
-      icon: "weight",
-      title: "Body weight",
-      value: `${formatNumber(weights[i].weightKg)}kg`,
-      change: delta !== 0 ? `${formatNumber(Math.abs(delta))}kg` : null,
-      direction: delta < 0 ? "down" : delta > 0 ? "up" : "flat",
-    });
-  }
+function WeekCard({ workouts, planned, progressUpdates, prs }: { workouts: number; planned: number; progressUpdates: number; prs: number }) {
+  return (
+    <Link href="/dashboard/review">
+      <Card className="h-full space-y-2 p-5 transition-shadow hover:shadow-md">
+        <p className={caption}>This week</p>
+        <p className="text-4xl font-bold tabular-nums">
+          {workouts}
+          <span className="ml-1.5 text-base font-medium text-muted-foreground">
+            workout{workouts === 1 ? "" : "s"}
+            {planned > 0 ? ` of ${planned} planned` : ""}
+          </span>
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {prs > 0 ? `${prs} PR${prs === 1 ? "" : "s"}` : "No PRs yet"}
+          {progressUpdates > 0 ? ` · ${progressUpdates} progress update${progressUpdates === 1 ? "" : "s"} logged` : ""}
+        </p>
+      </Card>
+    </Link>
+  );
+}
 
-  // Measurement changes (vs previous reading of same type).
-  const prevByType = new Map<string, number>();
-  for (const m of measurements) {
-    const prev = prevByType.get(m.typeId);
-    if (prev !== undefined) {
-      const delta = m.value - prev;
-      items.push({
-        date: m.date,
-        icon: "measurement",
-        title: m.typeName,
-        value: formatMeasurement(m.value, m.unit),
-        change:
-          delta !== 0
-            ? `${formatNumber(Math.abs(delta))}${
-                m.unit === "INCH" ? '"' : "cm"
-              }`
-            : null,
-        direction: delta < 0 ? "down" : delta > 0 ? "up" : "flat",
-      });
-    }
-    prevByType.set(m.typeId, m.value);
-  }
+const IMPORT_KIND: Record<string, string> = { COMPLETED: "Full workout", PARTIAL: "Partial workout", PR_UPDATE: "PR / progress update" };
 
-  items.sort((a, b) => b.date.localeCompare(a.date));
-  return items;
+function LatestImportCard({ item, canImport }: { item: WorkoutListItemDTO | null; canImport: boolean }) {
+  return (
+    <Card className="space-y-2 p-5">
+      <p className={caption}>
+        <MessageSquareText className="h-3.5 w-3.5 text-primary" /> Latest WhatsApp import
+      </p>
+      {item ? (
+        <>
+          <p className="font-semibold">{item.exercises.slice(0, 3).join(", ") || "Imported sets"}</p>
+          <p className="text-sm text-muted-foreground">
+            {IMPORT_KIND[item.status] ?? "Import"} · {item.sets} set{item.sets === 1 ? "" : "s"} recorded · {formatDate(item.date)}
+          </p>
+          <Link href="/dashboard/workouts?show=whatsapp" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+            See imports <ArrowRight className="h-4 w-4" />
+          </Link>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            {canImport ? "Paste a WhatsApp update to record PRs in seconds." : "No WhatsApp imports yet."}
+          </p>
+          {canImport && (
+            <Link href="/dashboard/import" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              Import WhatsApp <ArrowRight className="h-4 w-4" />
+            </Link>
+          )}
+        </>
+      )}
+    </Card>
+  );
 }

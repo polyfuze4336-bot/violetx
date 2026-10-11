@@ -33,7 +33,8 @@ export interface WeeklyReview {
   weekStart: string;
   weekEnd: string;
   hasData: boolean;
-  training: { workouts: number; sets: number; volumeKg: number; prevVolumeKg: number; volumeChangePct: number | null };
+  /** `workouts` counts complete workout days only; `progressUpdates` are PR / partial days. */
+  training: { workouts: number; progressUpdates: number; sets: number; volumeKg: number; prevVolumeKg: number; volumeChangePct: number | null };
   strength: { prs: { exerciseName: string; label: string }[] };
   body: { weightChangeKg: number | null; waistChangeCm: number | null; latestWeightKg: number | null };
   recovery: { avgReadiness: number | null; checkIns: number };
@@ -69,7 +70,11 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
 
   const rows = weekSets(i.sets, start);
   const prev = weekSets(i.sets, prevStart);
-  const workouts = new Set(rows.map((s) => day(s.date))).size;
+  const workouts = new Set(rows.filter((s) => !s.partial).map((s) => day(s.date))).size;
+  const fullDays = new Set(rows.filter((s) => !s.partial).map((s) => day(s.date)));
+  const progressUpdates = new Set(rows.filter((s) => s.partial).map((s) => day(s.date)).filter((d) => !fullDays.has(d))).size;
+  // PR / partial records say nothing about what was not recorded.
+  const incomplete = [rows, prev, weekSets(i.sets, add(start, -14))].some((r) => r.some((s) => s.partial));
   const vol = Math.round(volume(rows));
   const prevVol = Math.round(volume(prev));
 
@@ -125,27 +130,32 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
   const lowerNow = lowerSeries[2];
   const lowerFlat = lowerSeries.every((v) => v > 0) && Math.max(...lowerSeries) - Math.min(...lowerSeries) <= Math.max(1, Math.max(...lowerSeries) * 0.1);
 
-  const hasData = workouts > 0 || w.latest !== null || waist.latest !== null || scores.length > 0 || nutRows.length > 0;
+  const hasData = workouts > 0 || progressUpdates > 0 || w.latest !== null || waist.latest !== null || scores.length > 0 || nutRows.length > 0;
 
   // Observation (deterministic, evidence-based).
   const obs: string[] = [];
   if (planned > 0 && workouts >= planned) obs.push("Excellent consistency this week.");
   else if (workouts > 0) obs.push(`${workouts} workout${workouts === 1 ? "" : "s"} recorded this week.`);
+  else if (progressUpdates > 0) obs.push("No full workouts were recorded this week.");
   else obs.push("No workouts were recorded this week.");
+  if (progressUpdates > 0) {
+    obs.push(`You logged ${progressUpdates} PR or progress update${progressUpdates === 1 ? "" : "s"}. Based on your recorded exercises, this does not show how much else you trained.`);
+  }
   if (strengthPrs.length > 0) obs.push(`Strength is moving up with ${strengthPrs.length} PR${strengthPrs.length === 1 ? "" : "s"}.`);
   if (w.change !== null && w.change < 0) obs.push("Body weight is trending down.");
   else if (w.change !== null && w.change > 0) obs.push("Body weight ticked up.");
-  if (lowerFlat) obs.push("Lower-body volume has been relatively flat for three weeks.");
-  else if (upperNow > 0 && lowerNow < upperNow * 0.6) obs.push("Lower-body volume is noticeably lower than upper-body this week.");
+  if (!incomplete && lowerFlat) obs.push("Lower-body volume has been relatively flat for three weeks.");
+  else if (!incomplete && upperNow > 0 && lowerNow < upperNow * 0.6) obs.push("Lower-body volume is noticeably lower than upper-body this week.");
 
   // Next week proposals.
   const next: string[] = [];
   if (planned > 0) next.push(`Aim for ${planned} sessions`);
   else if (workouts > 0) next.push(`Maintain ${Math.max(workouts, 3)} sessions`);
+  else if (progressUpdates > 0) next.push("Log a full workout to see weekly volume and consistency");
   else next.push("Schedule 3 sessions to get back into rhythm");
   const progressed = Array.from(new Set(prs.filter((p) => p.type !== "REPS").map((p) => p.exerciseName)));
   if (progressed.length > 0) next.push(`Consider progression on ${progressed.slice(0, 2).join(" and ")}`);
-  if (lowerFlat || (upperNow > 0 && lowerNow < upperNow * 0.6)) next.push("Monitor lower-body volume");
+  if (!incomplete && (lowerFlat || (upperNow > 0 && lowerNow < upperNow * 0.6))) next.push("Monitor lower-body volume");
   const readiness = avg(scores);
   if (readiness !== null && readiness < 65) next.push("Prioritise recovery: sleep and lighter sessions if needed");
   else if (readiness !== null) next.push("Maintain recovery habits");
@@ -157,6 +167,7 @@ export function buildWeeklyReview(i: ReviewInput): WeeklyReview {
     hasData,
     training: {
       workouts,
+      progressUpdates,
       sets: rows.reduce((a, s) => a + rowSets(s), 0),
       volumeKg: vol,
       prevVolumeKg: prevVol,

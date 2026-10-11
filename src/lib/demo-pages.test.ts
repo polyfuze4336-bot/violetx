@@ -185,3 +185,97 @@ describe("demo UX", () => {
     expect(html).not.toContain('type="email"');
   }, 60_000);
 });
+
+const asOwner = () =>
+  session.mockResolvedValue({
+    user: { id: "demo-user", email: DEMO_EMAIL, name: "Owner", role: "OWNER", athleteId: "demo-athlete" },
+    expires: "2999-01-01T00:00:00.000Z",
+  });
+
+const before = (html: string, a: string, b: string) => html.indexOf(a) !== -1 && html.indexOf(b) !== -1 && html.indexOf(a) < html.indexOf(b);
+
+describe("gym-progress-first Home", () => {
+  it("shows today, the latest PR, strength trend, import, week and Violet in priority order", async () => {
+    asOwner();
+    const html = await render(() => import("@/app/dashboard/page"));
+    for (const label of ["Start workout", "Import WhatsApp", "Latest PR", "Strength trend", "This week", "Latest WhatsApp import", "Violet"]) {
+      expect(html, label).toContain(label);
+    }
+    expect(before(html, "Start workout", "Latest PR")).toBe(true);
+    expect(before(html, "Latest PR", "Strength trend")).toBe(true);
+    expect(before(html, "Strength trend", "Latest WhatsApp import")).toBe(true);
+    expect(before(html, "Latest WhatsApp import", "Body weight")).toBe(true);
+    // Body, nutrition and recovery are no longer competing cards.
+    expect(html).not.toMatch(/Training activity|Progress timeline|Body progress|Calories|Readiness/);
+    expect(html).toMatch(/PR/);
+    expect(html).toMatch(/Based on your recorded sessions/);
+    expect(fake.writes).toEqual([]);
+  }, 60_000);
+
+  it("the demo viewer sees the same progress but no start/import actions", async () => {
+    const html = await render(() => import("@/app/dashboard/page"));
+    expect(html).toContain("Latest PR");
+    expect(html).toContain("Strength trend");
+    expect(html).not.toContain("Start workout");
+    expect(html).not.toContain("Import WhatsApp");
+  }, 60_000);
+});
+
+describe("consolidated navigation (rendered)", () => {
+  it("the dashboard layout has exactly the five primary destinations and no drawer", async () => {
+    asOwner();
+    const html = await render(() => import("@/app/dashboard/layout") as never, { children: "content" });
+    const navs = Array.from(html.matchAll(/<nav[^>]*aria-label="Primary"[^>]*>([\s\S]*?)<\/nav>/g)).map((m) => m[1]);
+    expect(navs).toHaveLength(2); // desktop sidebar + mobile bottom bar
+    for (const nav of navs) {
+      const labels = Array.from(nav.matchAll(/<a[^>]*>([\s\S]*?)<\/a>/g)).map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+      expect(labels).toEqual(["Home", "Workout", "Progress", "Violet", "More"]);
+    }
+    expect(html).not.toContain("Close menu");
+  }, 60_000);
+
+  it("the Workout and Progress sections render their tabs", async () => {
+    asOwner();
+    const workout = await render(() => import("@/app/dashboard/workouts/layout") as never, { children: "body" });
+    for (const t of ["Today", "History", "Programs", "Exercises"]) expect(workout).toContain(`>${t}<`);
+    const progress = await render(() => import("@/app/dashboard/records/layout") as never, { children: "body" });
+    for (const t of ["Overview", "PRs", "Exercises", "Body"]) expect(progress).toContain(`>${t}<`);
+
+    session.mockResolvedValue({
+      user: { id: "demo-user", email: DEMO_EMAIL, name: "Demo", role: "DEMO_VIEWER", athleteId: "demo-athlete" },
+      expires: "2999-01-01T00:00:00.000Z",
+    });
+    const demoWorkout = await render(() => import("@/app/dashboard/programs/layout") as never, { children: "body" });
+    expect(demoWorkout).not.toContain(">Today<");
+    expect(demoWorkout).toContain(">History<");
+  }, 60_000);
+
+  it("More lists the grouped secondary features (the demo viewer gets the read-only ones)", async () => {
+    asOwner();
+    const owner = await render(() => import("@/app/dashboard/more/page"));
+    for (const t of ["Training insights", "Health &amp; tracking", "Journey", "Sharing", "Account", "Nutrition", "Gym Journey", "Goals", "Recovery", "Coach share", "Start workout", "Import WhatsApp"]) {
+      expect(owner, t).toContain(t);
+    }
+    session.mockResolvedValue({
+      user: { id: "demo-user", email: DEMO_EMAIL, name: "Demo", role: "DEMO_VIEWER", athleteId: "demo-athlete" },
+      expires: "2999-01-01T00:00:00.000Z",
+    });
+    const demo = await render(() => import("@/app/dashboard/more/page"));
+    expect(demo).toContain("Nutrition");
+    expect(demo).not.toContain("Coach share");
+    expect(demo).not.toContain("Settings &amp; profile");
+    expect(demo).not.toContain("Start workout");
+  }, 60_000);
+
+  it("History lists previous workouts with the filter pills and a link to the day-by-day log", async () => {
+    const html = await render(() => import("@/app/dashboard/workouts/page"), { searchParams: {} });
+    expect(html).toContain("Previous workouts");
+    for (const f of ["All", "Workouts", "Partial", "PR updates", "WhatsApp imports"]) expect(html).toContain(f);
+    expect(html).toContain("/dashboard/history");
+    // Seeded workouts are complete: no partial / PR-update sections appear.
+    expect(html).not.toContain("Partial workouts");
+    const filtered = await render(() => import("@/app/dashboard/workouts/page"), { searchParams: { show: "updates" } });
+    expect(filtered).toContain("Nothing here yet");
+    expect(fake.writes).toEqual([]);
+  }, 60_000);
+});

@@ -7,6 +7,7 @@ import { exerciseDetailService } from "@/lib/services/exerciseDetail";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { ExportPdfButton } from "@/components/dashboard/export-pdf-button";
 import { ExerciseProgression } from "@/components/strength/exercise-progression";
 import type { PerformanceRef } from "@/lib/services/exerciseDetail";
 
@@ -51,6 +52,7 @@ export default async function ExerciseDetailPage({
           </div>
           {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
         </div>
+        <ExportPdfButton exerciseId={params.id} label="Export PDF" />
         {currentBest && (
           <div className="text-right">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

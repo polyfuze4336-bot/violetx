@@ -15,7 +15,7 @@ export default async function CoachPage() {
     <div className="space-y-6">
       <PageHeader
         title="Violet, your AI coach"
-        description={`Chat naturally about your training — Violet turns it into records for ${PATIENT_LABEL} to approve.`}
+        description={`Ask about your PRs, strength and progress. Violet can also turn a WhatsApp update into records for ${PATIENT_LABEL} to review and approve.`}
       />
       <VioletChat provider={aiProviderLabel()} />
     </div>

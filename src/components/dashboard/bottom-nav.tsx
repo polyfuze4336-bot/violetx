@@ -2,42 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/components/dashboard/nav-config";
+import { primaryNavFor, sectionOf } from "@/components/dashboard/nav-config";
 import type { Role } from "@/lib/rbac";
 
-export function BottomNav({
-  role,
-  onMore,
-}: {
-  role: Role;
-  onMore: () => void;
-}) {
+/** Mobile bottom bar: Home, Workout, Progress, Violet, More. */
+export function BottomNav({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter((item) =>
-    role === "OWNER"
-      ? item.bottomNav
-      : role === "DEMO_VIEWER"
-        ? (item.bottomNav && (!item.ownerOnly || item.demoVisible)) || item.coachBottomNav
-        : (item.bottomNav && !item.ownerOnly) || item.coachBottomNav
-  );
+  const current = sectionOf(pathname);
 
   return (
     <nav
+      aria-label="Primary"
       className="glass fixed inset-x-0 bottom-0 z-40 border-t lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="mx-auto flex max-w-lg items-stretch justify-around">
-        {items.map((item) => {
-          const active =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname.startsWith(item.href);
+        {primaryNavFor(role).map((item) => {
+          const active = item.key === current;
           return (
             <Link
-              key={item.href}
+              key={item.key}
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
@@ -46,18 +32,10 @@ export function BottomNav({
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.shortLabel ?? item.label}
+              {item.label}
             </Link>
           );
         })}
-        <button
-          type="button"
-          onClick={onMore}
-          className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium text-muted-foreground transition-colors active:scale-95"
-        >
-          <MoreHorizontal className="h-5 w-5" />
-          More
-        </button>
       </div>
     </nav>
   );

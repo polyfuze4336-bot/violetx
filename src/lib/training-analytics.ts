@@ -19,6 +19,12 @@ export interface TrainingSet {
   sets: number | null;
   /** Assisted exercise (weight = assistance, lower is better); derived from the name if omitted. */
   assisted?: boolean;
+  /**
+   * Recorded as a PR / progress update or partial workout. The set is real, but
+   * the day is NOT a complete session: it never counts as a workout day, and
+   * what was not recorded is unknown, not zero.
+   */
+  partial?: boolean;
 }
 
 export const MUSCLE_GROUPS = [
@@ -138,6 +144,8 @@ export interface PeriodSummary {
   volumeKg: number;
   setsByMuscle: Partial<Record<MuscleGroup, number>>;
   isCurrent: boolean;
+  /** Days with only PR / partial records (not counted as sessions). */
+  updates: number;
 }
 
 function rowSets(s: TrainingSet): number {
@@ -166,9 +174,11 @@ export function summarizePeriods(
       volumeKg: 0,
       setsByMuscle: {},
       isCurrent: key === currentStart,
+      updates: 0,
       days: new Set(),
     });
   }
+  const partialDays = new Map<string, Set<string>>();
 
   for (const r of rows) {
     const day = isoDay(r.date);
@@ -176,7 +186,12 @@ export function summarizePeriods(
     if (!p) continue;
     const n = rowSets(r);
     const muscle = resolveMuscleGroup(r.exerciseName, r.muscleGroup);
-    p.days.add(day);
+    if (r.partial) {
+      const key = periodStart(day, period);
+      (partialDays.get(key) ?? partialDays.set(key, new Set()).get(key)!).add(day);
+    } else {
+      p.days.add(day);
+    }
     p.sets += n;
     p.reps += r.reps * n;
     p.volumeKg += rowVolumeKg(r, n);
@@ -185,7 +200,8 @@ export function summarizePeriods(
 
   return starts.map((k) => {
     const { days, ...rest } = map.get(k)!;
-    return { ...rest, sessions: days.size, volumeKg: Math.round(rest.volumeKg) };
+    const onlyPartial = Array.from(partialDays.get(k) ?? []).filter((d) => !days.has(d)).length;
+    return { ...rest, sessions: days.size, updates: onlyPartial, volumeKg: Math.round(rest.volumeKg) };
   });
 }
 
@@ -516,6 +532,8 @@ export interface RollingWindow {
   weeklyDaysByMuscle: Partial<Record<MuscleGroup, number>>;
   repRangeShare: { low: number; moderate: number; high: number };
   totalSets: number;
+  /** Some recorded sets came from PR / partial updates: the window is incomplete. */
+  hasIncompleteRecords: boolean;
 }
 
 export function rollingWindow(
@@ -527,6 +545,7 @@ export function rollingWindow(
   const start = end - (days - 1) * DAY_MS;
   const weeks = days / 7;
   const sessionDays = new Set<string>();
+  let hasIncompleteRecords = false;
   const muscleSets: Partial<Record<MuscleGroup, number>> = {};
   const muscleDays: Partial<Record<MuscleGroup, Set<string>>> = {};
   let low = 0;
@@ -540,7 +559,8 @@ export function rollingWindow(
     if (t < start || t > end) continue;
     const n = rowSets(r);
     const muscle = resolveMuscleGroup(r.exerciseName, r.muscleGroup);
-    sessionDays.add(day);
+    if (r.partial) hasIncompleteRecords = true;
+    else sessionDays.add(day);
     muscleSets[muscle] = (muscleSets[muscle] ?? 0) + n;
     (muscleDays[muscle] ??= new Set()).add(day);
     total += n;
@@ -563,6 +583,7 @@ export function rollingWindow(
     weeklyDaysByMuscle,
     repRangeShare: { low: share(low), moderate: share(moderate), high: share(high) },
     totalSets: total,
+    hasIncompleteRecords,
   };
 }
 
@@ -624,7 +645,19 @@ export function buildRuleBasedTips(input: {
     });
   }
 
-  if (window.sessionsPerWeek < 2) {
+  // Partial / PR-only records say nothing about the sessions or sets that were
+  // not recorded, so frequency, coverage and volume claims need complete data.
+  const complete = !window.hasIncompleteRecords;
+
+  if (!complete) {
+    tips.push({
+      category: "consistency",
+      priority: 3,
+      title: "Tips use your recorded exercises only",
+      detail:
+        "Some of your recent entries are PR or partial updates, so VioletX cannot tell how many sessions or sets you did in total. Log full workouts to unlock session-frequency and weekly-volume guidance.",
+    });
+  } else if (window.sessionsPerWeek < 2) {
     tips.push({
       category: "frequency",
       priority: 1,
@@ -641,7 +674,7 @@ export function buildRuleBasedTips(input: {
   }
 
   // Weekly sets per muscle group vs the 10–20 hypertrophy range.
-  for (const g of MAJOR_GROUPS) {
+  for (const g of complete ? MAJOR_GROUPS : []) {
     const sets = window.weeklySetsByMuscle[g] ?? 0;
     if (sets === 0) {
       tips.push({
@@ -668,7 +701,7 @@ export function buildRuleBasedTips(input: {
   }
 
   // Frequency: lots of volume squeezed into one weekly session.
-  for (const g of MAJOR_GROUPS) {
+  for (const g of complete ? MAJOR_GROUPS : []) {
     const sets = window.weeklySetsByMuscle[g] ?? 0;
     const daysPerWeek = window.weeklyDaysByMuscle[g] ?? 0;
     if (sets >= 8 && daysPerWeek <= 1.25) {
@@ -682,9 +715,9 @@ export function buildRuleBasedTips(input: {
   }
 
   // Week-over-week volume trend (last two complete weeks).
-  const complete = weeks.filter((w) => !w.isCurrent);
-  if (complete.length >= 2) {
-    const [prev, last] = [complete[complete.length - 2], complete[complete.length - 1]];
+  const finishedWeeks = weeks.filter((w) => !w.isCurrent);
+  if (complete && finishedWeeks.length >= 2) {
+    const [prev, last] = [finishedWeeks[finishedWeeks.length - 2], finishedWeeks[finishedWeeks.length - 1]];
     if (prev.volumeKg > 0 && last.volumeKg > prev.volumeKg * 1.3) {
       tips.push({
         category: "recovery",

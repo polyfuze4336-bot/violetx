@@ -59,7 +59,9 @@ no feature was removed or redesigned away, and historical data stays valid.
 | **Coach** | Read-only dashboards and share link with goals, consistency, strength, workouts, readiness scores. | `/coach/<token>` |
 
 Deep dives: [DATA-MODEL](docs/DATA-MODEL.md) · [WORKOUT-ENGINE](docs/WORKOUT-ENGINE.md) ·
-[VIOLET-INTELLIGENCE](docs/VIOLET-INTELLIGENCE.md) · [AI-SAFETY](docs/AI-SAFETY.md) · [ROADMAP](docs/ROADMAP.md).
+[VIOLET-INTELLIGENCE](docs/VIOLET-INTELLIGENCE.md) · [AI-SAFETY](docs/AI-SAFETY.md) · [ROADMAP](docs/ROADMAP.md) ·
+[WHATSAPP-IMPORT-AND-NAVIGATION](docs/WHATSAPP-IMPORT-AND-NAVIGATION.md) ·
+[FEATURES-FOCUS-PDF-FEEDBACK](docs/FEATURES-FOCUS-PDF-FEEDBACK.md).
 Prototype showcase: a read-only **demo account** with fictional history — see [DEMO-MODE](docs/DEMO-MODE.md).
 
 ### Implementation assessment (what V2 started from)

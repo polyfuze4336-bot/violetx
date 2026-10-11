@@ -1,3 +1,5 @@
+import { NAV_REDIRECTS } from "./src/lib/nav-redirects.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Produce a self-contained server bundle for Azure App Service.
@@ -5,6 +7,9 @@ const nextConfig = {
   // Enable instrumentation.ts (Key Vault secret hydration at startup).
   experimental: {
     instrumentationHook: true,
+  },
+  async redirects() {
+    return NAV_REDIRECTS.map((r) => ({ ...r, permanent: false }));
   },
   // Coach share pages carry a secret token in the URL: never leak it via
   // Referer and never cache the response.

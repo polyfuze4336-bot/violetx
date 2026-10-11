@@ -29,6 +29,9 @@ const SYSTEM_PROMPT = [
   "  and never compute historical PRs or progressions yourself.",
   "- Assisted lifts (progression kind ASSISTANCE, or `assisted: true`): the weight is machine/band ASSISTANCE, so LESS assistance is",
   "  progress and means stronger. Say 'improved from 40 kg assistance to 25 kg assistance', never 'the load decreased'.",
+  "- Recorded data is NOT complete activity. Entries can be PR / partial updates (see `workouts.progressUpdates`). Say \"based on your",
+  "  recorded exercises\"; never say the athlete only did N exercises, skipped a muscle group, or had a short/low-volume workout,",
+  "  because unrecorded activity is unknown, not zero.",
   '- Return ONLY JSON: { "answer": string }',
 ].join("\n");
 

@@ -9,6 +9,7 @@ import { nutritionService } from "@/lib/services/nutrition";
 import { toNumber } from "@/lib/dto";
 import { detectPrEvents } from "@/lib/analytics";
 import { isAssistedExercise } from "@/lib/progression-type";
+import { isIncompleteSessionStatus } from "@/lib/import-interpretation";
 import { computeReadiness } from "@/lib/readiness";
 import { buildWeeklyReview, mondayOf, type WeeklyReview } from "@/lib/weekly-review";
 import { todayIso } from "@/lib/dates";
@@ -58,6 +59,7 @@ export const weeklyReviewService = {
         sets: e.sets ?? null,
         assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
         setType: e.setType,
+        partial: isIncompleteSessionStatus(e.session?.status),
       })),
       prs: prs.map((p) => ({
         date: p.date,

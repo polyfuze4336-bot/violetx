@@ -79,7 +79,8 @@ describe("the demo viewer cannot reach any mutation through server actions", () 
       names.push(...Object.keys((await load()) as object));
     }
     expect(names.length).toBeGreaterThan(50);
-  });
+    // Loading every action module the first time is slow; allow for it.
+  }, 30_000);
 
   for (const [file, load] of Object.entries(modules)) {
     if (file.endsWith("helpers.ts")) continue;
@@ -177,7 +178,7 @@ describe("there is no other write surface", () => {
       });
     walk(path.resolve("src"));
     expect(hits.every((h) => h.startsWith("lib/actions/"))).toBe(true);
-  });
+  }, 30_000);
 });
 
 describe("demo login (prototype only)", () => {

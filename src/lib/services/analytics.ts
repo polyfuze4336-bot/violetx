@@ -6,6 +6,7 @@ import { workoutRepository } from "@/lib/repositories/workout";
 import { requireViewerAthlete } from "@/lib/services/context";
 import { derivePrEvents } from "@/lib/services/personalRecord";
 import { isAssistedExercise } from "@/lib/progression-type";
+import { isIncompleteSessionStatus } from "@/lib/import-interpretation";
 import { toNumber } from "@/lib/dto";
 import { buildAnalytics, type AnalyticsResult, type RangeKey } from "@/lib/analytics-engine";
 
@@ -33,6 +34,7 @@ export async function computeAnalytics(athleteId: string, range: RangeKey, now: 
           assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
           setType: e.setType,
           sessionId: e.sessionId,
+          partial: isIncompleteSessionStatus(e.session?.status),
         })),
         sessions: sessions.map((s) => ({
           id: s.id,

@@ -15,7 +15,7 @@ export interface CoachInfo {
  * that primary owner may see or change them. Any other OWNER account has its own
  * private athlete and must never reach the primary owner's coach.
  */
-function isPrimaryOwner(email: string | null | undefined): boolean {
+export function isPrimaryOwner(email: string | null | undefined): boolean {
   const primary = process.env.OWNER_EMAIL?.trim().toLowerCase();
   return Boolean(primary && email && email.trim().toLowerCase() === primary);
 }

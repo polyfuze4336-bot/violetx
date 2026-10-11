@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
-import { LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { LogOut, MessageSquareWarning, Monitor, Moon, Sun } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ export function UserMenu({
   role: Role;
 }) {
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
   const themes = [
     { key: "light", label: "Light", icon: Sun },
     { key: "dark", label: "Dark", icon: Moon },
@@ -108,6 +111,14 @@ export function UserMenu({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
+          {isOwner && (
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link href={`/dashboard/feedback?from=${encodeURIComponent(pathname)}`}>
+                <MessageSquareWarning className="h-4 w-4" />
+                Report a bug / request a feature
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => signOut({ callbackUrl: "/" })}
             className="cursor-pointer"

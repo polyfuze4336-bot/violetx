@@ -92,6 +92,8 @@ export interface WorkoutListItemDTO {
   exercises: string[];
   gym: string | null;
   sessionRpe: number | null;
+  /** Saved from a WhatsApp import. */
+  fromWhatsApp: boolean;
 }
 
 const toSetDTO = (e: {
@@ -186,8 +188,16 @@ async function buildActiveView(
 }
 
 /** Session-free workout list (also used by the token-authorised coach view). */
-export async function listWorkoutsFor(athleteId: string, take = 30): Promise<WorkoutListItemDTO[]> {
-  const rows = await workoutRepository.listSessions(athleteId, take);
+export async function listWorkoutsFor(
+  athleteId: string,
+  take = 30,
+  options: { includeIncomplete?: boolean } = {}
+): Promise<WorkoutListItemDTO[]> {
+  const rows = await workoutRepository.listSessions(
+    athleteId,
+    take,
+    options.includeIncomplete ? ["COMPLETED", "IN_PROGRESS", "PARTIAL", "PR_UPDATE"] : undefined
+  );
   return rows.map((s) => {
     const work = workingSets(s.entries);
     return {
@@ -206,6 +216,7 @@ export async function listWorkoutsFor(athleteId: string, take = 30): Promise<Wor
       exercises: Array.from(new Set(s.entries.map((e) => e.exercise.name))),
       gym: s.gymBranch?.name ?? null,
       sessionRpe: s.sessionRpe,
+      fromWhatsApp: s.importBatchId !== null && s.importBatchId !== undefined,
     };
   });
 }
@@ -218,9 +229,13 @@ async function requireActiveSession(athleteId: string) {
 
 export const workoutService = {
   // --- Reads (OWNER or COACH) ---
-  async listSessions(take = 30): Promise<WorkoutListItemDTO[]> {
+  /**
+   * `includeIncomplete` adds partial workouts and PR / progress updates (saved
+   * from WhatsApp). They are never counted as completed workouts.
+   */
+  async listSessions(take = 30, options: { includeIncomplete?: boolean } = {}): Promise<WorkoutListItemDTO[]> {
     const { athleteId } = await requireViewerAthlete();
-    return listWorkoutsFor(athleteId, take);
+    return listWorkoutsFor(athleteId, take, options);
   },
 
   // --- Owner-only live workout ---

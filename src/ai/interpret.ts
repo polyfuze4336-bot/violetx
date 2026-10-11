@@ -20,6 +20,8 @@ export interface SetProposal {
   exercise: string;
   reps: number;
   weightKg: number;
+  /** The message called this a PR. A claim for the PR engine to verify. */
+  prClaim?: boolean;
   confidence: number;
   needsResolution: boolean;
 }
@@ -107,6 +109,7 @@ export function buildInterpretation(
       exercise: s.exercise,
       reps: s.reps,
       weightKg: s.weightKg,
+      ...(s.prClaim ? { prClaim: true } : {}),
       confidence: known ? 0.96 : ambiguous ? 0.5 : 0.85,
       needsResolution: ambiguous,
     };

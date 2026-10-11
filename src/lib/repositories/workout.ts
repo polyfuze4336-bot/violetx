@@ -124,9 +124,9 @@ export const workoutRepository = {
     return r.count;
   },
 
-  listSessions(athleteId: string, take: number) {
+  listSessions(athleteId: string, take: number, statuses: string[] = ["COMPLETED", "IN_PROGRESS"]) {
     return prisma.workoutSession.findMany({
-      where: { athleteId, status: { in: ["COMPLETED", "IN_PROGRESS"] } },
+      where: { athleteId, status: { in: statuses } },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take,
       include: {

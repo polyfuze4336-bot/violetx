@@ -85,6 +85,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: { 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Workouts">
           <SimpleBars data={a.buckets.map((b) => ({ ...b }))} xKey="label" series={[{ key: "workouts", name: "Workouts", color: 1 }, { key: "prs", name: "PRs", color: 2 }]} legend />
+          {a.incomplete.days > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {a.incomplete.days} day{a.incomplete.days === 1 ? "" : "s"} with PR or partial updates {a.incomplete.days === 1 ? "is" : "are"} not counted as workouts. Unrecorded training is unknown, not zero.
+            </p>
+          )}
         </Section>
         <Section title="Volume (kg)">
           <ProgressLineChart data={a.buckets.map((b) => ({ ...b }))} xKey="label" series={[{ key: "volumeKg", name: "Volume", color: 1 }]} unit="kg" height={220} />

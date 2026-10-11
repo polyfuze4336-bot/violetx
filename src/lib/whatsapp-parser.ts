@@ -14,6 +14,8 @@ export interface ParsedExerciseSet {
   exercise: string;
   reps: number;
   weightKg: number;
+  /** The message itself called this a PR ("PR bench 80 x 10"). A claim, not a fact. */
+  prClaim?: boolean;
 }
 
 export interface ParsedImport {
@@ -231,12 +233,62 @@ function parseExerciseLine(line: string): ParsedExerciseSet | null {
     if (leftKg && !rightKg) {
       return makeSet(name, rightNum, leftNum); // weight x reps
     }
+    if (!leftKg && !rightKg && looksLikeWeightFirst(leftNum, rightNum)) {
+      return makeSet(name, rightNum, leftNum); // "Bench 80x10"
+    }
     // right has kg, or neither -> reps x weight
     return makeSet(name, leftNum, rightNum);
   }
 
   return null;
 }
+
+/**
+ * Unit-less "A x B": the load comes first ("80x10", "25x10") unless only the
+ * right side is too large to be a rep count ("9x50" stays 9 reps at 50 kg).
+ */
+function looksLikeWeightFirst(left: string, right: string): boolean {
+  return !(Number(left.replace(",", ".")) <= 30 && Number(right.replace(",", ".")) > 30);
+}
+
+/**
+ * A set with no exercise name ("80 x 10", "80kg x 10"), which belongs to the
+ * exercise named on an earlier line. Load first is the lifting convention.
+ */
+function parseBareSetLine(line: string): { reps: number; weightKg: number } | null {
+  const m = line.match(
+    /^(\d+(?:[.,]\d+)?)\s*(kgs?)?\s*[x×*]\s*(\d+(?:[.,]\d+)?)\s*(kgs?)?\.?$/i
+  );
+  if (!m) return null;
+  const left = Number(m[1].replace(",", "."));
+  const right = Number(m[3].replace(",", "."));
+  const leftKg = Boolean(m[2]);
+  const rightKg = Boolean(m[4]);
+  let weightKg = left;
+  let reps = right;
+  const repsFirst = rightKg && !leftKg ? true : !leftKg && !rightKg && !looksLikeWeightFirst(m[1], m[3]);
+  if (repsFirst) {
+    weightKg = right;
+    reps = left;
+  }
+  return Number.isInteger(reps) && reps >= 0 ? { reps, weightKg } : null;
+}
+
+const PR_PATTERN = "\\bnew\\s+(?:pr|pb)\\b|\\b(?:pr|pb)\\b|\\bpersonal\\s+(?:record|best)\\b|🏆";
+
+/** Remove "PR" wording from a line, reporting whether the author called it a PR. */
+function stripPrWording(line: string): { text: string; claimed: boolean } {
+  const claimed = new RegExp(PR_PATTERN, "i").test(line);
+  if (!claimed) return { text: line.trim(), claimed: false };
+  const text = line
+    .replace(new RegExp(PR_PATTERN, "gi"), " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s:!-]+|[\s:!-]+$/g, "");
+  return { text, claimed: true };
+}
+
+/** A line with words only ("Bench", "Lat pulldown"): possibly an exercise heading. */
+const HEADING_LINE = /^[A-Za-z][A-Za-z\s'/().&+-]{1,40}$/;
 
 function makeSet(
   nameRaw: string,
@@ -270,18 +322,40 @@ export function parseWhatsAppMessage(
     unparsedLines: [],
   };
 
+  // The exercise that following bare sets ("80 x 10") belong to, and the
+  // heading line it came from (removed from "unparsed" once it is used).
+  let current: string | null = null;
+  let headingIndex: number | null = null;
+
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    const { text: line, claimed } = stripPrWording(trimmed);
     if (!line) continue;
+    const prClaim = claimed ? { prClaim: true } : {};
 
     const set = parseExerciseLine(line);
     if (set) {
-      result.sets.push(set);
+      result.sets.push({ ...set, ...prClaim });
+      current = set.exercise;
+      headingIndex = null;
+      continue;
+    }
+
+    const bare = current ? parseBareSetLine(line) : null;
+    if (bare && current) {
+      result.sets.push({ exercise: current, ...bare, ...prClaim });
+      if (headingIndex !== null) {
+        result.unparsedLines.splice(headingIndex, 1);
+        headingIndex = null;
+      }
       continue;
     }
 
     const measurement = parseMeasurementLine(line);
     if (measurement) {
+      current = null;
+      headingIndex = null;
       if (measurement.kind === "weight") {
         result.weightKg = measurement.weightKg;
       } else {
@@ -294,10 +368,17 @@ export function parseWhatsAppMessage(
       const date = findDateInLine(line, now);
       if (date) {
         result.date = date;
+        current = null;
+        headingIndex = null;
         continue;
       }
     }
 
+    // Words only: may head the sets on the lines below it.
+    if (HEADING_LINE.test(line)) {
+      current = titleCase(line);
+      headingIndex = result.unparsedLines.length;
+    }
     result.unparsedLines.push(line);
   }
 

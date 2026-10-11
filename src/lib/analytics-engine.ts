@@ -89,6 +89,8 @@ export interface AnalyticsResult {
   durations: { date: string; minutes: number; rpe: number | null }[];
   /** Plain-language observations about training distribution (not medical). */
   observations: string[];
+  /** Days with only PR / partial records: real data, but not complete workouts. */
+  incomplete: { days: number; sets: number };
   adherence: { pct: number | null; planned: number; done: number; weekly: { label: string; done: number; planned: number }[] } | null;
 }
 
@@ -158,7 +160,14 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
   const weeks = Math.max(1, spanDays / 7);
 
   const sessionById = new Map(input.sessions.map((s) => [s.id, s]));
-  const days = new Set(sets.map((s) => isoDay(s.date)));
+  // Workout days come from complete records only. PR / partial updates add
+  // sets and PRs but are never counted as (short) workouts: unknown, not zero.
+  const days = new Set(sets.filter((s) => !s.partial).map((s) => isoDay(s.date)));
+  const partialRows = sets.filter((s) => s.partial);
+  const incomplete = {
+    days: new Set(partialRows.map((s) => isoDay(s.date)).filter((d) => !days.has(d))).size,
+    sets: partialRows.reduce((a, s) => a + (s.sets && s.sets > 0 ? s.sets : 1), 0),
+  };
   const rowSets = (s: AnalyticsSet) => (s.sets && s.sets > 0 ? s.sets : 1);
 
   // Buckets (zero-filled so charts show gaps honestly).
@@ -169,7 +178,7 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
   for (const s of sets) {
     const b = buckets.get(bucketStart(isoDay(s.date), kind));
     if (!b) continue;
-    b.days.add(isoDay(s.date));
+    if (!s.partial) b.days.add(isoDay(s.date));
     b.sets += rowSets(s);
     b.volumeKg += rowVolumeKg(s, rowSets(s));
   }
@@ -331,7 +340,13 @@ export function buildAnalytics(input: AnalyticsInput, range: RangeKey, now: Date
     consistency,
     volumeByMuscle: Array.from(muscle.entries()).map(([m, v]) => ({ muscle: m, sets: v.sets, volumeKg: Math.round(v.volumeKg) })).sort((a, b) => b.sets - a.sets),
     volumeByExercise: Array.from(exercise.entries()).map(([name, v]) => ({ name, sets: v.sets, volumeKg: Math.round(v.volumeKg) })).sort((a, b) => b.volumeKg - a.volumeKg).slice(0, 10),
-    observations: muscleObservations(Array.from(muscle.entries()).map(([m, v]) => ({ muscle: m, sets: v.sets }))),
+    observations:
+      incomplete.sets > 0
+        ? [
+            "Based on your recorded exercises. Some entries are PR or partial updates, so muscle balance and training volume may be incomplete.",
+          ]
+        : muscleObservations(Array.from(muscle.entries()).map(([m, v]) => ({ muscle: m, sets: v.sets }))),
+    incomplete,
     weekdayDistribution: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, i) => ({ label, workouts: weekdayCounts[i] })),
     exerciseFrequency: Array.from(exercise.entries()).map(([name, v]) => ({ name, sessions: v.days.size })).sort((a, b) => b.sessions - a.sessions).slice(0, 10),
     prTimeline: prs.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30).map((p) => ({ ...p, date: isoDay(p.date) })),

@@ -3,13 +3,15 @@ import { Activity, BarChart3, Dumbbell, Trophy } from "lucide-react";
 
 import { requireAuth } from "@/lib/auth";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
+import { personalRecordService } from "@/lib/services/personalRecord";
+import { prEventDetail } from "@/lib/analytics";
 import {
   HYPERTROPHY_SETS_MAX,
   HYPERTROPHY_SETS_MIN,
   MUSCLE_GROUPS,
   type Period,
 } from "@/lib/training-analytics";
-import { formatNumber } from "@/lib/format";
+import { formatDate, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -39,7 +41,7 @@ export default async function TrainingProgressPage({
 }) {
   const viewer = await requireAuth();
   const period: Period = searchParams.period === "month" ? "month" : "week";
-  const data = await trainingProgressService.get(period);
+  const [data, prEvents] = await Promise.all([trainingProgressService.get(period), personalRecordService.prEvents()]);
 
   const hasData = data.window.totalSets > 0 || data.periods.some((p) => p.sets > 0);
   const unit = period === "week" ? "week" : "month";
@@ -49,6 +51,11 @@ export default async function TrainingProgressPage({
   const radarData = MUSCLE_GROUPS.filter((g) => g !== "Other" && data.window.weeklySetsByMuscle[g]).map(
     (g) => ({ muscle: g, sets: data.window.weeklySetsByMuscle[g] ?? 0 })
   );
+
+  // Both kinds of progress count: more load (or less assistance) and more reps.
+  const recentPrs = prEvents.slice(0, 4);
+  const improving = data.exercises.filter((e) => e.status === "progressing").slice(0, 4);
+  const incomplete = data.window.hasIncompleteRecords;
 
   const toggle = (
     <div className="inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
@@ -101,12 +108,78 @@ export default async function TrainingProgressPage({
         action={toggle}
       />
 
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Trophy className="h-4 w-4 text-magenta" /> Recent PRs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentPrs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No PRs yet.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {recentPrs.map((p) => {
+                  const d = prEventDetail(p);
+                  return (
+                    <li key={`${p.exerciseId}-${p.date}-${p.type}-${p.weightKg}`} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{p.exerciseName}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {formatNumber(p.weightKg)} kg{p.assisted ? " assistance" : ""} × {p.reps} · {d.detail} · {formatDate(p.date)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">{d.label.toUpperCase()}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <Link href="/dashboard/records" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+              All PRs
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Dumbbell className="h-4 w-4 text-primary" /> Top improving exercises
+            </CardTitle>
+            <CardDescription>Based on your recorded sessions. Lower assistance counts as stronger.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {improving.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Improvement shows after a few recorded sessions of an exercise.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {improving.map((e) => (
+                  <li key={e.exerciseId} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate font-semibold">{e.name}</span>
+                    <span className="shrink-0 font-semibold text-success">
+                      ↑ {e.assisted || e.changePct === null ? "Improving" : `+${e.changePct}% est. strength`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link href="/dashboard/strength" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+              All exercises
+            </Link>
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
-          label={`Sessions this ${unit}`}
+          label={`Workouts this ${unit}`}
           icon={Activity}
           value={String(current.sessions)}
-          hint={`${previous?.sessions ?? 0} last ${unit}`}
+          hint={
+            current.updates > 0
+              ? `+${current.updates} progress update${current.updates === 1 ? "" : "s"} · ${previous?.sessions ?? 0} last ${unit}`
+              : `${previous?.sessions ?? 0} last ${unit}`
+          }
         />
         <StatCard
           label="Sets"
@@ -173,7 +246,10 @@ export default async function TrainingProgressPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Muscle balance</CardTitle>
-          <CardDescription>Sets per week, last 4 weeks · dashed ring = {HYPERTROPHY_SETS_MIN}-set target</CardDescription>
+          <CardDescription>
+            Sets per week, last 4 weeks · dashed ring = {HYPERTROPHY_SETS_MIN}-set target
+            {incomplete ? " · based on your recorded exercises (PR and partial updates mean some training is not recorded)" : ""}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid items-center gap-4 md:grid-cols-2">
           {radarData.length >= 3 ? (
@@ -183,7 +259,8 @@ export default async function TrainingProgressPage({
           )}
           <div className="flex flex-wrap gap-2">
             {radarData.map((m) => {
-              const low = m.sets < HYPERTROPHY_SETS_MIN;
+              // With partial records a low count is unknown, not a shortfall.
+              const low = !incomplete && m.sets < HYPERTROPHY_SETS_MIN;
               const high = m.sets > HYPERTROPHY_SETS_MAX;
               return (
                 <span

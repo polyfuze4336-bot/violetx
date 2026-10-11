@@ -69,6 +69,11 @@ export default async function ReviewPage({ searchParams }: { searchParams: { wee
               <p className="text-3xl font-bold tabular-nums">
                 {r.training.workouts} <span className="text-base font-medium text-muted-foreground">workouts</span>
               </p>
+              {r.training.progressUpdates > 0 && (
+                <p className="text-sm font-medium text-primary">
+                  + {r.training.progressUpdates} PR / progress update{r.training.progressUpdates === 1 ? "" : "s"} (not counted as workouts)
+                </p>
+              )}
               <p className="text-sm tabular-nums text-muted-foreground">
                 {r.training.volumeKg.toLocaleString()} kg recorded volume
                 {r.training.volumeChangePct !== null && (

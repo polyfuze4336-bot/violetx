@@ -24,6 +24,8 @@ import {
   violetInterpretAction,
 } from "@/lib/actions/violet";
 import { checkImportDuplicatesAction } from "@/lib/actions/import";
+import { ImportTypeReview, useImportType } from "@/components/import/import-type-review";
+import { IMPORT_TYPE_LABEL } from "@/lib/import-interpretation";
 import { PATIENT_LABEL } from "@/lib/constants";
 import {
   ExerciseNameCheck,
@@ -54,6 +56,7 @@ interface ESet {
   weightKg: string;
   confidence: number;
   needsResolution: boolean;
+  prClaim?: boolean;
   resolution: Resolution;
   duplicate: boolean;
 }
@@ -139,11 +142,13 @@ export function VioletChat({ provider }: { provider: string }) {
         weightKg: String(s.weightKg),
         confidence: s.confidence,
         needsResolution: s.needsResolution,
+        prClaim: s.prClaim,
         resolution: "IMPORT",
         duplicate: false,
       }));
       setMeasurements(nextMeas);
       setSets(nextSets);
+      importType.reset();
       setHasProposals(
         r.weightKg != null || nextMeas.length > 0 || nextSets.length > 0
       );
@@ -203,6 +208,20 @@ export function VioletChat({ provider }: { provider: string }) {
     (s) => s.resolution !== "SKIP" && needsNameDecision(suggestionFor(s.exercise), s.decision)
   ).length;
 
+  const importType = useImportType(
+    rawText,
+    sets
+      .filter((s) => s.resolution !== "SKIP")
+      .map((s) => ({
+        exercise: s.exercise,
+        exerciseRef: decisionRef(s.decision),
+        reps: s.reps,
+        weightKg: s.weightKg,
+        prClaim: s.prClaim,
+        unresolved: needsNameDecision(suggestionFor(s.exercise), s.decision),
+      }))
+  );
+
   const savable =
     (weight && weight.resolution !== "SKIP" ? 1 : 0) +
     measurements.filter((m) => m.resolution !== "SKIP").length +
@@ -212,6 +231,7 @@ export function VioletChat({ provider }: { provider: string }) {
     startTransition(async () => {
       const result = await violetCommitAction({
         rawText,
+        importType: importType.type,
         date,
         weight: weight
           ? {
@@ -243,7 +263,11 @@ export function VioletChat({ provider }: { provider: string }) {
       if (result.ok) {
         pushMessage({
           role: "violet",
-          text: `Saved ${result.data.measurementsCreated} measurement(s) and ${result.data.setsCreated} set(s). Recorded to your history · approved by ${PATIENT_LABEL}.`,
+          text: `Saved ${result.data.measurementsCreated} measurement(s) and ${result.data.setsCreated} set(s)${
+            result.data.setsCreated > 0
+              ? ` as ${IMPORT_TYPE_LABEL[result.data.importType]}${result.data.importType === "FULL" ? "" : " (not counted as a completed workout)"}`
+              : ""
+          }. Recorded to your history · approved by ${PATIENT_LABEL}.`,
         });
         setHasProposals(false);
         setMeasurements([]);
@@ -297,7 +321,7 @@ export function VioletChat({ provider }: { provider: string }) {
           </div>
           <div className="border-t p-3">
             <div className="mb-2 flex flex-wrap gap-1.5">
-              {["How am I doing?", "How is my bench progressing?", "How is my recovery?", "Am I on track with my goals?"].map((q) => (
+              {["How am I progressing?", "What PRs have I broken recently?", "Which exercises have stalled?", "Where have my reps improved?", "How are my assisted chin-ups progressing?", "What should I focus on next?"].map((q) => (
                 <button
                   key={q}
                   type="button"
@@ -430,6 +454,26 @@ export function VioletChat({ provider }: { provider: string }) {
                   </Select>
                 </ProposalRow>
               ))}
+
+              {sets.length > 0 && (
+                <ImportTypeReview
+                  compact
+                  date={date}
+                  sets={sets
+                    .filter((s) => s.resolution !== "SKIP")
+                    .map((s) => ({
+                      exercise: s.exercise,
+                      exerciseRef: decisionRef(s.decision),
+                      reps: s.reps,
+                      weightKg: s.weightKg,
+                      prClaim: s.prClaim,
+                      unresolved: needsNameDecision(suggestionFor(s.exercise), s.decision),
+                    }))}
+                  type={importType.type}
+                  onChange={importType.setType}
+                  recommendation={importType.recommendation}
+                />
+              )}
 
               {sets.map((s, i) => (
                 <ProposalRow

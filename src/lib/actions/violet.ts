@@ -8,6 +8,7 @@ import { measurementService } from "@/lib/services/measurement";
 import { exerciseService } from "@/lib/services/exercise";
 import { athleteService } from "@/lib/services/athlete";
 import { importService, type ImportSummary } from "@/lib/services/import";
+import { markPrClaims, type ImportType } from "@/lib/import-interpretation";
 import { interpretMessage, type VioletInterpretation } from "@/ai/interpret";
 import { interpretMessageWithAi } from "@/ai/llm";
 import { detectInjection } from "@/ai/safety";
@@ -89,12 +90,14 @@ export async function violetInterpretAction(
     }
     if (!interpretation) interpretation = interpretMessage(text, interpretCtx);
 
-    return { ...interpretation, provider };
+    return { ...interpretation, sets: markPrClaims(text, interpretation.sets), provider };
   });
 }
 
 export interface VioletCommitInput {
   rawText: string;
+  /** What the message represents; defaults to PARTIAL (missing = unknown). */
+  importType?: ImportType;
   date: string;
   weight: { value: number; resolution: Resolution; confidence: number } | null;
   measurements: {
@@ -123,6 +126,7 @@ export async function violetCommitAction(
 
     const summary = await importService.commit({
       rawText: input.rawText,
+      importType: input.importType,
       date: new Date(input.date),
       weightKg: input.weight?.value,
       weightResolution: input.weight?.resolution ?? "IMPORT",

@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, MessageSquareText } from "lucide-react";
 
 import { requireAuth } from "@/lib/auth";
 import { exerciseService } from "@/lib/services/exercise";
@@ -11,6 +12,8 @@ import { ActiveWorkout } from "@/components/workout/active-workout";
 import { StartWorkout } from "@/components/workout/start-workout";
 import { RecentWorkouts } from "@/components/workout/recent-workouts";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { WorkoutTabs } from "@/components/dashboard/section-tabs";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +40,18 @@ export default async function WorkoutPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title="Workout" description="Start a workout and log sets as you go." />
+      <WorkoutTabs role={viewer.role} />
+      <PageHeader
+        title="Workout"
+        description="Start a workout and log sets as you go."
+        action={
+          <Button asChild variant="outline">
+            <Link href="/dashboard/import">
+              <MessageSquareText className="h-4 w-4" /> Import WhatsApp
+            </Link>
+          </Button>
+        }
+      />
       {today && <TodayCard today={today} canStart />}
       <StartWorkout library={library} label={today ? "Start a different workout" : "Start workout"} />
       <RecentWorkouts items={recent.filter((r) => r.status === "COMPLETED")} />

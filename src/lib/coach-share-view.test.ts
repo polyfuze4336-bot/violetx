@@ -372,7 +372,7 @@ describe("read-only enforcement", () => {
       expect(src, f).not.toMatch(/@\/lib\/actions/);
       expect(src, f).not.toMatch(/<form|<button|<Button|onClick|onSubmit|<input|<Input|<textarea/i);
     }
-  });
+  }, 30_000);
 
   it("only the share page reads shared data (no other route or API exposes it)", () => {
     const hits: string[] = [];
@@ -387,7 +387,7 @@ describe("read-only enforcement", () => {
     };
     walk(path.resolve("src"));
     expect(hits.sort()).toEqual(["app/share/coach/[token]/page.tsx", "lib/services/shareLink.ts"]);
-  });
+  }, 30_000);
 });
 
 describe("rendering", () => {

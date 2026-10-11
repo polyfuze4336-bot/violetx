@@ -12,6 +12,7 @@ import {
   type ExerciseSuggestionDTO,
 } from "@/lib/services/exerciseMatch";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
+import type { NameFixProposal } from "@/lib/exercise-name-review";
 import type { ExerciseDTO, ExerciseEntryDTO } from "@/lib/dto";
 import type {
   CreateExerciseEntryInput,
@@ -25,6 +26,25 @@ function revalidate() {
   revalidatePath("/dashboard/strength");
   revalidatePath("/dashboard/records");
   revalidatePath("/dashboard/settings");
+}
+
+/** Misspelled or duplicate exercises already saved (read-only proposals). */
+export async function reviewExerciseNamesAction(): Promise<ActionResult<NameFixProposal[]>> {
+  return runAction(() => exerciseMatchService.reviewLibrary());
+}
+
+/** Apply one confirmed rename or merge. */
+export async function applyExerciseNameFixAction(input: {
+  exerciseId: string;
+  action: "RENAME" | "MERGE";
+  targetRef: string;
+}): Promise<ActionResult<{ name: string }>> {
+  const result = await runAction(() => exerciseMatchService.applyNameFix(input));
+  if (result.ok) {
+    revalidate();
+    revalidatePath("/dashboard/exercises");
+  }
+  return result;
 }
 
 /** Propose canonical exercises for typed/imported names (read-only). */

@@ -38,6 +38,10 @@ queries simple.
 **Backward compatibility:** `ExerciseEntry` rows without a session/RPE/type (legacy + WhatsApp imports)
 behave exactly as before. Warm-up sets are excluded from PRs, volume and analytics.
 
+`WorkoutSession.status` also takes `PARTIAL` and `PR_UPDATE` (WhatsApp imports that are not a full workout; no schema
+change, the column is free text). They are never counted as workouts — see
+[WHATSAPP-IMPORT-AND-NAVIGATION](WHATSAPP-IMPORT-AND-NAVIGATION.md).
+
 ### Programs (0008)
 `WorkoutProgram` → `WorkoutTemplate` → `WorkoutTemplateExercise`. Programs are archived, never deleted;
 templates still referenced by past sessions are archived instead of removed.
@@ -67,3 +71,7 @@ the weekly review are all computed from recorded data so they can never drift ou
 `0006` coach share link · `0007` workout engine foundation · `0008` programs + AI audit ·
 `0009` goals + check-ins · `0010` nutrition targets. They run via `prisma migrate deploy` in the deploy
 workflow before the new code is published.
+
+### Feedback (0011)
+`FeedbackReport` (userId, kind BUG|FEATURE, title, details, page, status). No relations; see
+[FEATURES-FOCUS-PDF-FEEDBACK](FEATURES-FOCUS-PDF-FEEDBACK.md).

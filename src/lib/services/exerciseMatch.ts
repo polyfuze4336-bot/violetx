@@ -1,4 +1,9 @@
-import { exerciseRepository } from "@/lib/repositories/exercise";
+import { exerciseEntryRepository, exerciseRepository } from "@/lib/repositories/exercise";
+import { prisma } from "@/lib/db";
+import { NotFoundError } from "@/lib/rbac";
+import { exerciseIdentityKeys, parseExerciseRef } from "@/lib/exercise-matching";
+import { reviewExerciseNames, type NameFixProposal } from "@/lib/exercise-name-review";
+import { starterCreateData } from "@/lib/exercise-library";
 import { requireOwnerAthlete } from "@/lib/services/context";
 import { STARTER_EXERCISES } from "@/lib/exercise-library";
 import { suggestExerciseWithAi } from "@/ai/exercise-match";
@@ -76,6 +81,79 @@ export const exerciseMatchService = {
       })
     );
     return final.map(toDto);
+  },
+
+  /**
+   * Spelling mistakes and duplicates among exercises that are already saved
+   * (imported before name checking, or typed by hand). Read-only: proposals only.
+   */
+  async reviewLibrary(): Promise<NameFixProposal[]> {
+    const { athleteId } = await requireOwnerAthlete();
+    const [library, entries] = await Promise.all([exerciseRepository.list(athleteId), exerciseEntryRepository.list(athleteId)]);
+    const counts = new Map<string, number>();
+    for (const e of entries) counts.set(e.exerciseId, (counts.get(e.exerciseId) ?? 0) + 1);
+    return reviewExerciseNames(
+      library.map((l) => ({ id: l.id, name: l.name, aliases: l.aliases, active: l.active })),
+      STARTER_EXERCISES,
+      counts
+    );
+  },
+
+  /**
+   * Apply ONE confirmed correction. RENAME keeps the exercise and its history
+   * and remembers the old spelling as an alias. MERGE moves the recorded sets,
+   * workout rows, template rows and goals to the target exercise, then removes
+   * the emptied duplicate. The target is validated against the athlete's own
+   * library or the canonical list; it can never be an arbitrary id.
+   */
+  async applyNameFix(input: { exerciseId: string; action: "RENAME" | "MERGE"; targetRef: string }): Promise<{ name: string }> {
+    const { athleteId } = await requireOwnerAthlete();
+    const ref = parseExerciseRef(input.targetRef);
+    const library = await exerciseRepository.list(athleteId);
+    const source = library.find((l) => l.id === input.exerciseId);
+    if (!source || !ref) throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+
+    const MAX_ALIASES = 400;
+    const addAlias = (aliases: string | null, name: string, owner: { name: string }) => {
+      if (exerciseIdentityKeys(name)[0] === exerciseIdentityKeys(owner.name)[0]) return aliases;
+      const next = [aliases, name].filter(Boolean).join(", ");
+      return next.length <= MAX_ALIASES ? next : aliases;
+    };
+
+    if (input.action === "RENAME") {
+      if (ref.kind !== "starter") throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+      const starter = STARTER_EXERCISES.find((s) => s.name === ref.name);
+      if (!starter) throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+      const keys = new Set(exerciseIdentityKeys(starter.name, starter.aliases));
+      const clash = library.find((l) => l.id !== source.id && exerciseIdentityKeys(l.name, l.aliases).some((k) => keys.has(k)));
+      if (clash) throw new NotFoundError("An exercise with that name already exists. Merge into it instead.");
+      const meta = starterCreateData(starter);
+      await exerciseRepository.update(athleteId, source.id, {
+        name: starter.name,
+        aliases: addAlias(source.aliases, source.name, starter),
+        category: source.category ?? meta.category ?? null,
+        muscleGroup: source.muscleGroup ?? meta.muscleGroup ?? null,
+        equipment: source.equipment ?? meta.equipment ?? null,
+      });
+      return { name: starter.name };
+    }
+
+    if (ref.kind !== "id" || ref.id === source.id) throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+    const target = library.find((l) => l.id === ref.id);
+    if (!target) throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+
+    await prisma.$transaction([
+      prisma.exerciseEntry.updateMany({ where: { athleteId, exerciseId: source.id }, data: { exerciseId: target.id } }),
+      prisma.workoutExercise.updateMany({ where: { athleteId, exerciseId: source.id }, data: { exerciseId: target.id } }),
+      prisma.workoutTemplateExercise.updateMany({ where: { exerciseId: source.id }, data: { exerciseId: target.id } }),
+      prisma.goal.updateMany({ where: { athleteId, exerciseId: source.id }, data: { exerciseId: target.id } }),
+      prisma.exercise.update({
+        where: { id: target.id },
+        data: { aliases: addAlias(addAlias(target.aliases, source.name, target), source.aliases ?? "", target) || null },
+      }),
+      prisma.exercise.deleteMany({ where: { id: source.id, athleteId } }),
+    ]);
+    return { name: target.name };
   },
 
   /** Everything the user may pick from when choosing another exercise. */

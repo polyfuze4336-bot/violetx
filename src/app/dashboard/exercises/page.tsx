@@ -3,6 +3,8 @@ import { Dumbbell } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { exerciseService } from "@/lib/services/exercise";
 import { personalRecordService } from "@/lib/services/personalRecord";
+import { exerciseMatchService } from "@/lib/services/exerciseMatch";
+import { ExerciseNameCleanup } from "@/components/exercises/exercise-name-cleanup";
 import {
   Card,
   CardContent,
@@ -28,6 +30,8 @@ export default async function ExercisesPage() {
         personalRecordService.list(),
       ])
     : [[], []];
+  // Corrections change data, so only the athlete is offered them (not the demo viewer).
+  const nameFixes = viewer.athleteId && viewer.role === "OWNER" ? await exerciseMatchService.reviewLibrary() : [];
 
   const stats: Record<string, ExerciseStats> = {};
   for (const r of prs) {
@@ -46,6 +50,8 @@ export default async function ExercisesPage() {
         title="Exercise library"
         description="Your exercises, muscles and personal history."
       />
+
+      <ExerciseNameCleanup proposals={nameFixes} />
 
       {exercises.length === 0 && !isOwner ? (
         <EmptyState icon={Dumbbell} title="No exercises recorded yet" />

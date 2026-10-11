@@ -4,6 +4,7 @@ import { requireViewerAthlete } from "@/lib/services/context";
 import { toNumber } from "@/lib/dto";
 import { derivePrEvents } from "@/lib/services/personalRecord";
 import { isAssistedExercise } from "@/lib/progression-type";
+import { isIncompleteSessionStatus } from "@/lib/import-interpretation";
 import {
   buildExerciseSeries,
   buildProgressMatrix,
@@ -71,6 +72,7 @@ async function loadRows(): Promise<{ rows: TrainingSet[]; prEvents: ReturnType<t
       weightKg: toNumber(e.weightKg),
       sets: e.sets ?? null,
       assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
+      partial: isIncompleteSessionStatus(e.session?.status),
     })),
     prEvents: derivePrEvents(entries),
   };

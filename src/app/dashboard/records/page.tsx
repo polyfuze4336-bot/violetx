@@ -5,12 +5,13 @@ import { requireAuth } from "@/lib/auth";
 import { personalRecordService } from "@/lib/services/personalRecord";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { formatShortDate, formatNumber } from "@/lib/format";
-import { prEventDetail } from "@/lib/analytics";
+import { heaviestRecordedLifts, prEventDetail } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { ExportPdfButton } from "@/components/dashboard/export-pdf-button";
 import { HBarChart } from "@/components/charts/h-bar-chart";
 import { Sparkline } from "@/components/charts/sparkline";
 import { PrProgress } from "@/components/records/pr-progress";
@@ -43,15 +44,17 @@ export default async function RecordsPage() {
   // Assisted lifts are excluded here: their weight is assistance, not load.
   const weighted = records.filter((r) => !r.assisted);
   const heaviest = weighted.length ? weighted.reduce((a, b) => (b.maxWeightKg > a.maxWeightKg ? b : a)) : null;
-  const leaderboard = [...weighted]
-    .sort((a, b) => b.estimatedOneRepMaxKg - a.estimatedOneRepMaxKg)
-    .slice(0, 10)
-    .map((r) => ({ name: r.exerciseName, value: r.estimatedOneRepMaxKg }));
+  // Real recorded sets only: the heaviest set per exercise, never an estimate.
+  const leaderboard = heaviestRecordedLifts(records).map((r) => ({ name: r.exerciseName, value: r.maxWeightKg }));
+  const recordedSets = records.reduce((a, r) => a + r.totalSets, 0);
   const latest = prEvents.slice(0, 8);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Personal records" />
+      <PageHeader title="Personal records" action={<ExportPdfButton />} />
+      <p className="-mt-3 text-xs text-muted-foreground">
+        Every figure comes from the {recordedSets} sets you recorded or imported. Estimated strength is calculated from those sets and is always labelled.
+      </p>
 
       <section className="grid grid-cols-3 gap-3">
         <StatCard label="PRs" icon={Trophy} accent="magenta" value={String(prEvents.length)} />
@@ -109,7 +112,10 @@ export default async function RecordsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Strongest lifts</CardTitle>
+          <CardTitle className="text-base">Heaviest recorded lifts</CardTitle>
+          <CardDescription>
+            Your heaviest recorded set per exercise: a real set, not an estimate. Each exercise is a different movement, so compare it with its own history.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <HBarChart data={leaderboard} unit="kg" />

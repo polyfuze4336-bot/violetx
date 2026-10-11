@@ -59,7 +59,7 @@ export const exerciseEntryRepository = {
       },
       orderBy: [{ date: "desc" }, { position: "asc" }],
       take: options?.take,
-      include: { exercise: true },
+      include: { exercise: true, session: { select: { status: true } } },
     });
   },
 

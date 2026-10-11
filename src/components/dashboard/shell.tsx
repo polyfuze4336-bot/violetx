@@ -1,9 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import { SidebarBrand, SidebarNav } from "@/components/dashboard/sidebar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
@@ -23,8 +19,6 @@ export function DashboardShell({
   user: ShellUser;
   children: React.ReactNode;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-
   return (
     <div className="app-surface min-h-screen lg:grid lg:grid-cols-[264px_1fr]">
       {/* Desktop sidebar */}
@@ -60,33 +54,8 @@ export function DashboardShell({
         </main>
       </div>
 
-      {/* Mobile bottom navigation */}
-      <BottomNav role={user.role} onMore={() => setMoreOpen(true)} />
-
-      {/* Mobile "More" drawer with full navigation */}
-      {moreOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label="Close menu"
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setMoreOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t bg-card p-5 pb-8 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <SidebarBrand />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setMoreOpen(false)}
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <SidebarNav role={user.role} onNavigate={() => setMoreOpen(false)} />
-          </div>
-        </div>
-      )}
+      {/* Mobile bottom navigation (More is a page, not a drawer) */}
+      <BottomNav role={user.role} />
     </div>
   );
 }

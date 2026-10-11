@@ -130,7 +130,7 @@ describe("progressInsight", () => {
   it("reports consecutive session progress without exaggeration", () => {
     const pts = (...v: number[]) => v.map((e1rm, i) => ({ date: `2026-08-0${i + 1}`, e1rm }));
     expect(progressInsight([{ name: "Bench Press", points: pts(100, 102, 104, 106) }], null)).toBe(
-      "Your bench press estimated strength has progressed for three consecutive sessions."
+      "Your bench press estimated strength has progressed for three consecutive recorded sessions."
     );
     expect(progressInsight([{ name: "Squat", points: pts(100, 104, 103) }], 40)).toBeNull();
     expect(progressInsight([{ name: "Squat", points: pts(100, 104, 103) }], 80)).toMatch(/consistency/);

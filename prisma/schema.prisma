@@ -548,3 +548,23 @@ model DailyCheckIn {
 
   @@unique([athleteId, date])
 }
+
+/// Bug reports and feature requests submitted from inside the app.
+model FeedbackReport {
+  id        String   @id @default(cuid())
+  userId    String
+  /// BUG | FEATURE
+  kind      String   @db.NVarChar(12)
+  title     String   @db.NVarChar(120)
+  details   String   @db.NVarChar(2000)
+  /// App path the report was filed from (no query string).
+  page      String?  @db.NVarChar(200)
+  /// OPEN | PLANNED | DONE | DECLINED
+  status    String   @default("OPEN") @db.NVarChar(12)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+

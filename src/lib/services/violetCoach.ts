@@ -13,6 +13,9 @@ import { requireOwnerOrDemoAthlete } from "@/lib/services/context";
 import { todayIso } from "@/lib/dates";
 import { toNumber } from "@/lib/dto";
 import { isAssistedExercise } from "@/lib/progression-type";
+import { staleRecordFocus } from "@/lib/pr-focus";
+import { derivePrEvents } from "@/lib/services/personalRecord";
+import { buildExerciseSeries } from "@/lib/training-analytics";
 import {
   answerFromSnapshot,
   buildInsightSnapshot,
@@ -54,6 +57,7 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
       .filter((m) => /waist/i.test(m.typeName))
       .map((m) => ({ date: m.date, value: m.value * (m.unit === "INCH" ? 2.54 : 1) })),
     workouts: analytics.totals.workouts,
+    progressUpdates: analytics.incomplete.days,
     workoutsPerWeek: analytics.totals.workoutsPerWeek,
     prCount: analytics.prTimeline.length,
     consistencyPct: analytics.consistency.pct,
@@ -71,6 +75,24 @@ export async function loadInsightSnapshot(windowDays = WINDOW_DAYS, now: Date = 
       now,
       windowDays,
       new Set(entries.filter((e) => isAssistedExercise(e.exercise)).map((e) => e.exercise?.name ?? ""))
+    ),
+    focus: staleRecordFocus(
+      buildExerciseSeries(
+        entries
+          .filter((e) => e.setType !== "WARMUP")
+          .map((e) => ({
+            date: e.date.toISOString(),
+            exerciseId: e.exerciseId,
+            exerciseName: e.exercise?.name ?? "",
+            muscleGroup: e.exercise?.muscleGroup ?? null,
+            reps: e.reps,
+            weightKg: toNumber(e.weightKg),
+            sets: e.sets ?? null,
+            assisted: isAssistedExercise(e.exercise),
+          }))
+      ),
+      derivePrEvents(entries),
+      now
     ),
     nutrition: nutrition.map((n) => ({ date: n.entryDate, calories: n.calories, protein: n.protein, water: n.water })),
     goals: goals.map((g) => ({

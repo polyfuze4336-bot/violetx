@@ -9,14 +9,26 @@ import {
   parseExerciseRef,
 } from "@/lib/exercise-matching";
 import {
+  assessClaims,
+  SESSION_STATUS_FOR,
+  type ClaimAssessment,
+  type ImportType,
+} from "@/lib/import-interpretation";
+import { exerciseEntryRepository } from "@/lib/repositories/exercise";
+import { isAssistedExercise } from "@/lib/progression-type";
+import { toNumber } from "@/lib/dto";
+import {
+  assessImportSchema,
   commitImportSchema,
   findDuplicatesSchema,
+  type AssessImportInput,
   type CommitImportInput,
   type FindDuplicatesInput,
 } from "@/lib/schemas";
 
 export interface ImportSummary {
   importBatchId: string;
+  importType: ImportType;
   weightRecorded: boolean;
   measurementsCreated: number;
   setsCreated: number;
@@ -202,9 +214,60 @@ export const importService = {
   },
 
   /**
+   * Check the submitted sets against the recorded history with the existing PR
+   * engine, so the review can say "Confirmed REP PR" or "PR claim detected, but
+   * you already have 80 kg × 11" BEFORE anything is saved. Read-only; an AI never
+   * decides whether a PR exists.
+   */
+  async assess(input: AssessImportInput): Promise<ClaimAssessment[]> {
+    const { athleteId } = await requireOwnerAthlete();
+    const data = assessImportSchema.parse(input);
+    const day = data.date.toISOString().slice(0, 10);
+
+    const [library, entries] = await Promise.all([
+      prisma.exercise.findMany({ where: { athleteId }, select: { id: true, name: true, aliases: true, equipment: true } }),
+      exerciseEntryRepository.list(athleteId),
+    ]);
+    const history = entries
+      .filter((e) => e.setType !== "WARMUP")
+      .map((e) => ({
+        exerciseId: e.exerciseId,
+        exerciseName: e.exercise?.name ?? "",
+        date: e.date.toISOString(),
+        weightKg: toNumber(e.weightKg),
+        reps: e.reps,
+        position: e.position,
+        assisted: isAssistedExercise({ name: e.exercise?.name, equipment: e.exercise?.equipment }),
+      }));
+
+    return assessClaims({
+      history,
+      day,
+      claims: data.sets.map((s) => {
+        const row = s.unresolved ? null : findLibraryExercise(library, s);
+        const known = row ? library.find((l) => l.id === row.id) : undefined;
+        return {
+          exerciseId: row?.id ?? null,
+          exerciseName: known?.name ?? s.exercise,
+          weightKg: s.weightKg,
+          reps: s.reps,
+          assisted: isAssistedExercise({ name: known?.name ?? s.exercise, equipment: known?.equipment }),
+          claimedPr: s.prClaim === true,
+          unresolved: s.unresolved === true,
+        };
+      }),
+    });
+  },
+
+  /**
    * Persist a reviewed WhatsApp import in a single transaction. Each item can be
    * IMPORTed, SKIPped, or REPLACE (delete matching same-day records first).
    * Missing measurement types and exercises are created automatically.
+   *
+   * `importType` decides how the sets are filed: a FULL workout is a normal
+   * COMPLETED session; PARTIAL and PR_UPDATE are saved as incomplete sessions
+   * (workout counts, adherence and "sessions per week" ignore them), and a
+   * PR / progress update never claims to be the whole workout.
    */
   async commit(input: CommitImportInput): Promise<ImportSummary> {
     const { athleteId, actor } = await requireOwnerAthlete();
@@ -238,6 +301,7 @@ export const importService = {
 
       const summary: ImportSummary = {
         importBatchId: batch.id,
+        importType: data.importType,
         weightRecorded: false,
         measurementsCreated: 0,
         setsCreated: 0,
@@ -273,7 +337,18 @@ export const importService = {
       let sessionId: string | null = null;
       if (importedSets.length > 0) {
         const session = await tx.workoutSession.create({
-          data: { athleteId, date: data.date, importBatchId: batch.id },
+          data: {
+            athleteId,
+            date: data.date,
+            importBatchId: batch.id,
+            status: SESSION_STATUS_FOR[data.importType],
+            name:
+              data.importType === "PR_UPDATE"
+                ? "PR / progress update"
+                : data.importType === "PARTIAL"
+                  ? "Partial workout"
+                  : null,
+          },
         });
         sessionId = session.id;
       }
@@ -317,6 +392,8 @@ export const importService = {
       }
 
       let position = 0;
+      // A full workout also gets its normal exercise structure.
+      const workoutExerciseIds = new Map<string, string>();
       for (const set of data.sets) {
         if (set.resolution === "SKIP") {
           summary.skipped += 1;
@@ -340,11 +417,24 @@ export const importService = {
           });
           summary.replaced += del.count;
         }
+        let workoutExerciseId: string | null = null;
+        if (data.importType === "FULL" && sessionId) {
+          workoutExerciseId = workoutExerciseIds.get(exercise.id) ?? null;
+          if (!workoutExerciseId) {
+            const we = await tx.workoutExercise.create({
+              data: { athleteId, sessionId, exerciseId: exercise.id, sortOrder: workoutExerciseIds.size },
+              select: { id: true },
+            });
+            workoutExerciseId = we.id;
+            workoutExerciseIds.set(exercise.id, we.id);
+          }
+        }
         await tx.exerciseEntry.create({
           data: {
             athleteId,
             exerciseId: exercise.id,
             sessionId,
+            workoutExerciseId,
             date: data.date,
             reps: set.reps,
             weightKg: set.weightKg,

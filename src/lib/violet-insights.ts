@@ -8,6 +8,7 @@ export interface Reading {
 
 import { describeProgression } from "@/lib/workout-engine";
 import { isAssistedExercise } from "@/lib/progression-type";
+import { focusMessage, type FocusItem } from "@/lib/pr-focus";
 
 /** Deterministic load / rep progression between an exercise's last two sessions. */
 export interface Progression {
@@ -88,6 +89,8 @@ export interface InsightInput {
   /** Waist in cm. */
   waist: Reading[];
   workouts: number;
+  /** Days that only hold PR / partial records (not counted as workouts). */
+  progressUpdates?: number;
   workoutsPerWeek: number;
   prCount: number;
   consistencyPct: number | null;
@@ -95,6 +98,8 @@ export interface InsightInput {
   avgSessionRpe: number | null;
   e1rm: { name: string; changePct: number | null }[];
   progressions?: Progression[];
+  /** Exercises that have gone longest without a PR (see pr-focus.ts). */
+  focus?: FocusItem[];
   nutrition: { date: string; calories: number | null; protein: number | null; water: number | null }[];
   goals: { title: string; pct: number; achieved: boolean; targetIsLowerThanStart: boolean; type: string }[];
   readinessAvg7d: number | null;
@@ -112,10 +117,13 @@ export interface InsightSnapshot {
   windowDays: number;
   weight: SeriesFact | null;
   waist: SeriesFact | null;
-  workouts: { count: number; perWeek: number; consistencyPct: number | null; adherencePct: number | null; avgSessionRpe: number | null };
+  /** `count` = complete workouts. `progressUpdates` = PR / partial days: recorded, but not the whole story. */
+  workouts: { count: number; progressUpdates: number; perWeek: number; consistencyPct: number | null; adherencePct: number | null; avgSessionRpe: number | null };
   strength: { lift: string; changePct: number }[];
   /** Load and rep progressions between the last two sessions (both count as progress). */
   progressions: Progression[];
+  /** Longest without a PR first. Computed from recorded sets only. */
+  focus: FocusItem[];
   prCount: number;
   nutrition: { daysLogged: number; avgCalories: number | null; avgProtein: number | null; avgWaterL: number | null } | null;
   goals: { title: string; pct: number; achieved: boolean; type: string }[];
@@ -162,7 +170,7 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
   const missing: string[] = [];
   if (!weight) missing.push("body weight (needs at least two weigh-ins)");
   if (!waist) missing.push("waist measurements (needs at least two)");
-  if (i.workouts === 0) missing.push("workouts");
+  if (i.workouts === 0) missing.push((i.progressUpdates ?? 0) > 0 ? "full workouts (only PR / progress updates are recorded)" : "workouts");
   if (strength.length === 0 && (i.progressions ?? []).length === 0) missing.push("strength trends (needs repeated sessions of an exercise)");
   if (!nutrition) missing.push("nutrition logs");
   if (i.readinessAvg7d === null) missing.push("recovery check-ins");
@@ -174,6 +182,7 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
     waist,
     workouts: {
       count: i.workouts,
+      progressUpdates: i.progressUpdates ?? 0,
       perWeek: i.workoutsPerWeek,
       consistencyPct: i.consistencyPct,
       adherencePct: i.adherencePct,
@@ -181,6 +190,7 @@ export function buildInsightSnapshot(i: InsightInput): InsightSnapshot {
     },
     strength,
     progressions: i.progressions ?? [],
+    focus: i.focus ?? [],
     prCount: i.prCount,
     nutrition,
     goals: i.goals.map((g) => ({ title: g.title, pct: g.pct, achieved: g.achieved, type: g.type })),
@@ -235,6 +245,9 @@ export function composeSummary(s: InsightSnapshot): Summary {
     bullets.push(`Workouts: ${s.workouts.count} (${s.workouts.perWeek}/week)`);
     if (s.workouts.adherencePct !== null) bullets.push(`Program adherence: ${s.workouts.adherencePct}%`);
   }
+  if (s.workouts.progressUpdates > 0) {
+    bullets.push(`Progress updates logged: ${s.workouts.progressUpdates} (PR or partial entries, not counted as workouts)`);
+  }
   for (const p of s.progressions.slice(0, 3)) bullets.push(progressionText(p));
   for (const st of s.strength.slice(0, 3)) bullets.push(`${st.lift} estimated 1RM: ${signed(st.changePct, "%")}`);
   if (s.prCount > 0) bullets.push(`New PRs: ${s.prCount}`);
@@ -258,7 +271,11 @@ export function composeSummary(s: InsightSnapshot): Summary {
   const hasEvidence = bullets.length > 0;
   if (s.missing.length > 0) bullets.push(`Not enough data yet for: ${s.missing.join("; ")}.`);
   return {
-    headline: hasEvidence ? `Over the last ${s.windowDays} days:` : `There isn't enough recorded data in the last ${s.windowDays} days to assess progress.`,
+    headline: hasEvidence
+      ? s.workouts.progressUpdates > 0
+        ? `Over the last ${s.windowDays} days, based on your recorded exercises:`
+        : `Over the last ${s.windowDays} days:`
+      : `There isn't enough recorded data in the last ${s.windowDays} days to assess progress.`,
     bullets,
     conclusion,
   };
@@ -268,7 +285,7 @@ export function summaryText(sum: Summary): string {
   return [sum.headline, ...sum.bullets.map((b) => `• ${b}`), ...(sum.conclusion ? ["", sum.conclusion] : [])].join("\n");
 }
 
-export type Intent = "progress" | "training" | "strength" | "body" | "nutrition" | "recovery" | "goals" | "general";
+export type Intent = "progress" | "training" | "strength" | "focus" | "stalled" | "body" | "nutrition" | "recovery" | "goals" | "general";
 
 export function intentOf(text: string): Intent {
   const t = text.toLowerCase();
@@ -277,7 +294,9 @@ export function intentOf(text: string): Intent {
   if (/protein|calorie|nutrition|eat|water|diet|macro/.test(t)) return "nutrition";
   if (/recover|readiness|sleep|sore|tired|fatigue/.test(t)) return "recovery";
   if (/goal|target|on track/.test(t)) return "goals";
-  if (/bench|squat|deadlift|press|strength|1rm|pr\b|prs\b|stronger|lift/.test(t)) return "strength";
+  if (/focus|work on|neglect|overdue|longest|what should i/.test(t)) return "focus";
+  if (/stall|plateau|stuck|not improv/.test(t)) return "stalled";
+  if (/bench|squat|deadlift|press|strength|1rm|pr\b|prs\b|stronger|lift|\breps?\b|chin|pull-?up|assist|dip\b/.test(t)) return "strength";
   if (/weight|waist|body|fat|measure/.test(t)) return "body";
   if (/workout|train|session|frequency|consisten|volume/.test(t)) return "training";
   if (/progress/.test(t)) return "progress";
@@ -306,6 +325,17 @@ export function answerFromSnapshot(intent: Intent, s: InsightSnapshot): string {
         ? [...sentences, ...(lines.length ? [`Strength over the last ${s.windowDays} days:`, ...lines] : [])].join("\n")
         : "There isn't enough repeated lifting data in this period to show a strength trend yet.";
     }
+    case "focus":
+      return s.focus.length
+        ? `Based on your recorded sessions, focus on the lift that has gone longest without a PR:\n${s.focus.map((f) => `• ${focusMessage(f)}`).join("\n")}`
+        : "Nothing is overdue. Every lift you train regularly has a recent PR, or there are not enough recorded sessions yet to say.";
+    case "stalled": {
+      const flat = s.strength.filter((x) => x.changePct <= 0);
+      if (s.strength.length === 0) return "There isn't enough repeated lifting data in this period to tell whether any exercise has stalled.";
+      return flat.length
+        ? `Based on your recorded sessions, these lifts have not improved in estimated strength over the last ${s.windowDays} days:\n${flat.map((x) => `• ${x.lift}: ${signed(x.changePct, "%")}`).join("\n")}\nRep progress at the same load still counts as progress, so check the rep trend before changing anything.`
+        : `Based on your recorded sessions, none of your tracked lifts look stalled over the last ${s.windowDays} days.`;
+    }
     case "body": {
       const lines = pick(/^(Weight|Waist)/);
       return lines.length ? `Body changes over the last ${s.windowDays} days:\n${lines.map((l) => `• ${l}`).join("\n")}` : "I need at least two weigh-ins or waist measurements in this period to describe a trend.";
@@ -319,8 +349,10 @@ export function answerFromSnapshot(intent: Intent, s: InsightSnapshot): string {
     case "goals":
       return s.goals.length ? `Goals:\n${s.goals.map((g) => `• ${g.title}: ${g.achieved ? "achieved" : `${g.pct}%`}`).join("\n")}` : "You haven't set any goals yet.";
     case "training": {
-      const lines = pick(/^(Workouts|Program adherence|New PRs)/);
-      return lines.length ? `Training over the last ${s.windowDays} days:\n${lines.map((l) => `• ${l}`).join("\n")}` : "No workouts are recorded in this period.";
+      const lines = pick(/^(Workouts|Program adherence|New PRs|Progress updates)/);
+      return lines.length
+        ? `Training over the last ${s.windowDays} days${s.workouts.progressUpdates > 0 ? ", based on your recorded exercises" : ""}:\n${lines.map((l) => `• ${l}`).join("\n")}`
+        : "No workouts are recorded in this period.";
     }
     default:
       return summaryText(full);
@@ -369,7 +401,7 @@ export function progressInsight(
   }
   if (best) {
     const n = best.run;
-    return `Your ${best.name.toLowerCase()} estimated strength has progressed for ${COUNT_WORDS[n] ?? n} consecutive sessions.`;
+    return `Your ${best.name.toLowerCase()} estimated strength has progressed for ${COUNT_WORDS[n] ?? n} consecutive recorded sessions.`;
   }
   if (consistencyPct !== null && consistencyPct >= 75) return "Your training consistency has been strong recently.";
   return null;

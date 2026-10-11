@@ -8,12 +8,19 @@ import {
   type ImportSummary,
 } from "@/lib/services/import";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
-import type { CommitImportInput, FindDuplicatesInput } from "@/lib/schemas";
+import type { AssessImportInput, CommitImportInput, FindDuplicatesInput } from "@/lib/schemas";
+import type { ClaimAssessment } from "@/lib/import-interpretation";
 
 export async function checkImportDuplicatesAction(
   input: FindDuplicatesInput
 ): Promise<ActionResult<DuplicateReport>> {
   return runAction(() => importService.findDuplicates(input));
+}
+
+export async function assessImportAction(
+  input: AssessImportInput
+): Promise<ActionResult<ClaimAssessment[]>> {
+  return runAction(() => importService.assess(input));
 }
 
 export async function commitImportAction(

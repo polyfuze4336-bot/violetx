@@ -35,6 +35,8 @@ import {
   type NameDecision,
 } from "@/components/exercises/exercise-name-check";
 import { resolveMeasurementUnit } from "@/lib/whatsapp-parser";
+import { ImportTypeReview, useImportType } from "@/components/import/import-type-review";
+import { IMPORT_TYPE_LABEL } from "@/lib/import-interpretation";
 import {
   checkImportDuplicatesAction,
   commitImportAction,
@@ -57,6 +59,8 @@ interface EditableSet {
   decision: NameDecision | null;
   reps: string;
   weightKg: string;
+  /** The message called this a PR; verified against history before it is announced. */
+  prClaim?: boolean;
   duplicate: boolean;
   resolution: Resolution;
 }
@@ -173,6 +177,19 @@ export function ImportClient({
   }
 
   const suggestionFor = useExerciseSuggestions(parsed ? sets.map((s) => s.exercise) : []);
+  const importType = useImportType(
+    raw,
+    sets
+      .filter((s) => s.resolution !== "SKIP")
+      .map((s) => ({
+        exercise: s.exercise,
+        exerciseRef: decisionRef(s.decision),
+        reps: s.reps,
+        weightKg: s.weightKg,
+        prClaim: s.prClaim,
+        unresolved: needsNameDecision(suggestionFor(s.exercise), s.decision),
+      }))
+  );
 
   // Re-check duplicates after a confirmed correction: "Lat Pulldwon" may
   // already exist on this date under the canonical exercise.
@@ -246,9 +263,11 @@ export function ImportClient({
       decision: null,
       reps: String(s.reps),
       weightKg: String(s.weightKg),
+      prClaim: s.prClaim,
       duplicate: false,
       resolution: "IMPORT",
     }));
+    importType.reset();
     setDate(nextDate);
     setWeightKg(nextWeight);
     setMeasurements(nextMeas);
@@ -289,6 +308,7 @@ export function ImportClient({
     startTransition(async () => {
       const result = await commitImportAction({
         rawText: raw,
+        importType: importType.type,
         date: new Date(date),
         weightKg: weightKg ? Number(weightKg) : undefined,
         weightResolution,
@@ -329,6 +349,12 @@ export function ImportClient({
             <CheckCircle2 className="mt-0.5 h-5 w-5 text-success" />
             <div className="text-sm">
               <p className="font-medium">Import saved successfully.</p>
+              {summary.setsCreated > 0 && (
+                <p className="text-muted-foreground">
+                  Saved as {IMPORT_TYPE_LABEL[summary.importType]}
+                  {summary.importType === "FULL" ? "." : ". It does not count as a completed workout."}
+                </p>
+              )}
               <p className="text-muted-foreground">
                 {summary.weightRecorded ? "Weight recorded · " : ""}
                 {summary.measurementsCreated} measurement(s) ·{" "}
@@ -430,6 +456,23 @@ export function ImportClient({
                 </span>
               </div>
             )}
+
+            <ImportTypeReview
+              date={date}
+              sets={sets
+                .filter((s) => s.resolution !== "SKIP")
+                .map((s) => ({
+                  exercise: s.exercise,
+                  exerciseRef: decisionRef(s.decision),
+                  reps: s.reps,
+                  weightKg: s.weightKg,
+                  prClaim: s.prClaim,
+                  unresolved: needsNameDecision(suggestionFor(s.exercise), s.decision),
+                }))}
+              type={importType.type}
+              onChange={importType.setType}
+              recommendation={importType.recommendation}
+            />
 
             <section className="space-y-3">
               <div className="flex items-center justify-between">
@@ -683,7 +726,7 @@ export function ImportClient({
                 onClick={handleCommit}
                 disabled={isPending || recordCount === 0 || pendingNames > 0}
               >
-                {isPending ? "Saving…" : `Save ${recordCount} Records`}
+                {isPending ? "Saving…" : `Confirm import · ${recordCount} record${recordCount === 1 ? "" : "s"}`}
               </Button>
               <Button
                 variant="ghost"

@@ -236,3 +236,18 @@ export function prEventDetail(
   const d = e.prevWeightKg !== null ? Math.round((e.weightKg - e.prevWeightKg) * 10) / 10 : null;
   return { label: "Weight PR", detail: d !== null ? `+${d} kg` : `${e.weightKg} kg` };
 }
+
+/**
+ * The heaviest set actually recorded for each exercise, heaviest first. Only
+ * real sets are used: never an estimated 1RM. Assisted lifts are left out
+ * because their weight is assistance, which is not comparable load.
+ */
+export function heaviestRecordedLifts<T extends { exerciseName: string; assisted: boolean; maxWeightKg: number }>(
+  records: T[],
+  limit = 10
+): T[] {
+  return records
+    .filter((r) => !r.assisted)
+    .sort((a, b) => b.maxWeightKg - a.maxWeightKg || a.exerciseName.localeCompare(b.exerciseName))
+    .slice(0, limit);
+}

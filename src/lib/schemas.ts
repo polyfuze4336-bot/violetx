@@ -235,8 +235,31 @@ export const findDuplicatesSchema = z.object({
 });
 export type FindDuplicatesInput = z.infer<typeof findDuplicatesSchema>;
 
+/**
+ * What a WhatsApp import represents. PARTIAL is the default when a caller does
+ * not say: missing exercises are unknown, never "skipped", so an unlabelled
+ * import must not look like a completed workout.
+ */
+export const importTypeSchema = z.enum(["PR_UPDATE", "PARTIAL", "FULL"]).default("PARTIAL");
+
+export const assessImportSchema = z.object({
+  date: dateSchema,
+  sets: z
+    .array(
+      parsedExerciseSetSchema.extend({
+        prClaim: z.boolean().optional(),
+        /** The exercise name still waits for the user's confirmation. */
+        unresolved: z.boolean().optional(),
+      })
+    )
+    .max(500)
+    .default([]),
+});
+export type AssessImportInput = z.input<typeof assessImportSchema>;
+
 export const commitImportSchema = z.object({
   rawText: z.string().max(20000).optional(),
+  importType: importTypeSchema,
   date: dateSchema,
   weightKg: z.coerce.number().positive().max(1000).optional(),
   weightResolution: resolutionSchema,
@@ -247,7 +270,34 @@ export const commitImportSchema = z.object({
     .array(parsedExerciseSetSchema.extend({ resolution: resolutionSchema }))
     .default([]),
 });
-export type CommitImportInput = z.infer<typeof commitImportSchema>;
+export type CommitImportInput = z.input<typeof commitImportSchema>;
+
+// Feedback -------------------------------------------------------------------
+
+export const FEEDBACK_KINDS = ["BUG", "FEATURE"] as const;
+export const FEEDBACK_STATUSES = ["OPEN", "PLANNED", "DONE", "DECLINED"] as const;
+
+export const submitFeedbackSchema = z.object({
+  kind: z.enum(FEEDBACK_KINDS),
+  title: z.string().trim().min(3, "Add a short title.").max(120),
+  details: z.string().trim().min(10, "Describe it in at least a sentence.").max(2000),
+  /** Where it happened. Only an in-app path is kept; query strings are dropped. */
+  page: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((p) => {
+      if (!p || !p.startsWith("/") || p.startsWith("//")) return undefined;
+      return p.split("?")[0].split("#")[0];
+    }),
+});
+export type SubmitFeedbackInput = z.input<typeof submitFeedbackSchema>;
+
+export const setFeedbackStatusSchema = z.object({
+  id: z.string().min(1).max(64),
+  status: z.enum(FEEDBACK_STATUSES),
+});
 
 // Authentication --------------------------------------------------------------
 
