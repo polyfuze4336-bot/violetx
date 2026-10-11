@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({
 import { getServerSession } from "next-auth";
 
 import { reviewExerciseNames } from "@/lib/exercise-name-review";
+import { cleanExerciseDisplay, normalizeExerciseName, stripLabelNoise } from "@/lib/exercise-matching";
 import { STARTER_EXERCISES } from "@/lib/exercise-library";
 import { AuthenticationError, AuthorizationError, NotFoundError } from "@/lib/rbac";
 import { exerciseMatchService } from "@/lib/services/exerciseMatch";
@@ -53,6 +54,29 @@ describe("reviewing saved exercise names (pure)", () => {
     const out = reviewExerciseNames([lib("a", "Sled Pushh"), lib("b", "Sled Push")], [], new Map([["a", 1], ["b", 5]]));
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ exerciseId: "a", action: "MERGE", targetName: "Sled Push" });
+  });
+});
+
+describe("names imported with list numbering and invisible characters", () => {
+  const dirty = "2. \u2060leg Extension";
+  it("normalizes to the same exercise as the clean name", () => {
+    expect(stripLabelNoise(dirty)).toBe("leg Extension");
+    expect(cleanExerciseDisplay(dirty)).toBe("Leg Extension");
+    expect(normalizeExerciseName(dirty)).toBe(normalizeExerciseName("Leg Extension"));
+    expect(stripLabelNoise("2.5 kg press")).toBe("2.5 kg press");
+    expect(stripLabelNoise("21s Bicep Curl")).toBe("21s Bicep Curl");
+  });
+
+  it("proposes the canonical text for a formatting-only difference, and a tidy name otherwise", () => {
+    const out = reviewExerciseNames([lib("1", dirty), lib("2", "7. \u2060Sled Drag")], STARTER_EXERCISES, new Map([["1", 2]]));
+    expect(out.find((p) => p.exerciseId === "1")).toMatchObject({ action: "RENAME", targetName: "Leg Extension", reason: "FORMATTING", targetRef: "starter:Leg Extension" });
+    expect(out.find((p) => p.exerciseId === "2")).toMatchObject({ action: "RENAME", targetName: "Sled Drag", reason: "FORMATTING", targetRef: "clean:Sled Drag" });
+  });
+
+  it("numbered duplicates merge into one exercise", () => {
+    const out = reviewExerciseNames([lib("a", "4. \u2060Leg Adductor"), lib("b", "7. \u2060leg Adductor")], STARTER_EXERCISES, new Map([["a", 3], ["b", 1]]));
+    expect(out.filter((p) => p.action === "MERGE")).toHaveLength(1);
+    expect(out.find((p) => p.action === "MERGE")).toMatchObject({ exerciseId: "b", reason: "DUPLICATE", targetRef: "id:a" });
   });
 });
 
@@ -154,6 +178,26 @@ describe("correcting saved names (service)", () => {
     await expect(exerciseMatchService.reviewLibrary()).rejects.toBeInstanceOf(AuthenticationError);
     expect(JSON.stringify(fake.tables)).toBe(before);
     vi.unstubAllEnvs();
+  });
+
+  it("tidies a numbered name with 'clean:' and refuses any other text", async () => {
+    fake.tables.exercise.push({ id: "num", athleteId: "athlete-1", name: "7. \u2060Sled Drag", aliases: null, active: true });
+    const proposal = (await exerciseMatchService.reviewLibrary()).find((p) => p.exerciseId === "num")!;
+    expect(proposal).toMatchObject({ targetName: "Sled Drag", targetRef: "clean:Sled Drag" });
+    const before = JSON.stringify(rows("exercise"));
+    for (const targetRef of ["clean:Anything I Like", "clean:", "clean:7. Sled Drag"]) {
+      await expect(exerciseMatchService.applyNameFix({ exerciseId: "num", action: "RENAME", targetRef })).rejects.toBeInstanceOf(NotFoundError);
+    }
+    await expect(exerciseMatchService.applyNameFix({ exerciseId: "num", action: "MERGE", targetRef: "clean:Sled Drag" })).rejects.toBeInstanceOf(NotFoundError);
+    expect(JSON.stringify(rows("exercise"))).toBe(before);
+    await exerciseMatchService.applyNameFix({ exerciseId: "num", action: "RENAME", targetRef: proposal.targetRef });
+    expect(rows("exercise").find((e) => e.id === "num")).toMatchObject({ name: "Sled Drag", aliases: null });
+  });
+
+  it("a numbered name that equals the canonical exercise is renamed to the canonical text", async () => {
+    fake.tables.exercise.push({ id: "le", athleteId: "athlete-1", name: "2. \u2060leg Extension", aliases: null, active: true, category: null, muscleGroup: null, equipment: null });
+    await exerciseMatchService.applyNameFix({ exerciseId: "le", action: "RENAME", targetRef: "starter:Leg Extension" });
+    expect(rows("exercise").find((e) => e.id === "le")!.name).toBe("Leg Extension");
   });
 
   it("a library seeded from the starter list has nothing to correct", async () => {

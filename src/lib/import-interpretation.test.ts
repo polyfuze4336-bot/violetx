@@ -72,6 +72,21 @@ describe("parsing the three WhatsApp behaviours", () => {
   });
 });
 
+describe("WhatsApp list numbering and invisible characters are not part of the exercise name", () => {
+  it("strips '2. ' numbering and zero-width marks (real WhatsApp export text)", () => {
+    const text = ["1. \u2060leg press 10x100kg", "2. \u2060leg extension 12x40kg", "7) lat pulldown 10x45kg", "- \u200ebench 80x8"].join("\n");
+    const r = parseWhatsAppMessage(text, NOW);
+    expect(r.sets.map((s) => s.exercise)).toEqual(["Leg Press", "Leg Extension", "Lat Pulldown", "Bench"]);
+    expect(r.sets[1]).toMatchObject({ reps: 12, weightKg: 40 });
+  });
+
+  it("does not eat real numbers: '2.5 kg' loads and measurements still parse", () => {
+    const r = parseWhatsAppMessage("Hip abduction 9x50kg\nwaist 38.5", NOW);
+    expect(r.sets[0]).toMatchObject({ exercise: "Hip Abduction", reps: 9, weightKg: 50 });
+    expect(r.measurements[0]).toMatchObject({ name: "Waist", value: 38.5 });
+  });
+});
+
 describe("recommending an import type", () => {
   const sets = (spec: [string, number][]) =>
     spec.flatMap(([exercise, n]) => Array.from({ length: n }, () => ({ exercise })));

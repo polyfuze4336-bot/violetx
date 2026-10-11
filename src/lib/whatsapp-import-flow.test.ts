@@ -295,6 +295,12 @@ describe("spelling and unknown exercises in WhatsApp imports", () => {
     expect(a).toMatchObject({ status: "CONFIRMED_PR", prType: "ASSISTANCE", assisted: true });
   });
 
+  it("new custom exercises are saved without list numbering or invisible characters", async () => {
+    await exerciseService.seedStarterLibrary();
+    const summary = await commit("PARTIAL", day(0), [{ exercise: "7. \u2060Sled Drag", reps: 10, weightKg: 60 }]);
+    expect(summary.newExercises).toEqual(["Sled Drag"]);
+  });
+
   it("an unknown exercise is a first record and is created as a custom exercise on confirmation", async () => {
     await exerciseService.seedStarterLibrary();
     const [a] = await importService.assess({ date: at(day(0)), sets: [{ exercise: "Sled Push", reps: 10, weightKg: 100, prClaim: true }] });

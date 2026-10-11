@@ -126,9 +126,32 @@ function singular(t: string): string {
   return plural ? t.slice(0, -1) : t;
 }
 
+// Zero-width and direction marks that WhatsApp exports and copy/paste leave in names.
+const INVISIBLE = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g;
+
+/**
+ * Remove what is not part of the exercise name: invisible characters and a
+ * leading list marker ("2. ", "7) ", "- ", "• "). "2.5 kg press" is untouched.
+ */
+export function stripLabelNoise(raw: string): string {
+  return raw
+    .replace(INVISIBLE, "")
+    .replace(/^\s*(?:[\u2022*\-\u2013]\s+|\d{1,3}\s*[.)]\s+(?=\S))/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** A name as it should be displayed: no noise, each word starting with a capital. */
+export function cleanExerciseDisplay(raw: string): string {
+  return stripLabelNoise(raw)
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
 /** lowercase, strip accents, punctuation -> spaces, collapse spaces, canonical tokens. */
 export function normalizeExerciseName(raw: string): string {
-  const base = raw
+  const base = stripLabelNoise(raw)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()

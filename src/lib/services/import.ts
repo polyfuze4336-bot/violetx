@@ -7,6 +7,7 @@ import {
   exerciseIdentityKeys,
   matchExercise,
   parseExerciseRef,
+  stripLabelNoise,
 } from "@/lib/exercise-matching";
 import {
   assessClaims,
@@ -90,7 +91,7 @@ async function resolveExerciseForCommit(
   set: { exercise: string; exerciseRef?: string },
   newExercises: string[]
 ): Promise<LibraryRow> {
-  const typed = set.exercise.trim();
+  const typed = stripLabelNoise(set.exercise);
   const ref = parseExerciseRef(set.exerciseRef);
   if (set.exerciseRef && !ref) throw new NotFoundError("That exercise suggestion is not valid. Review the import again.");
 

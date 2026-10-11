@@ -4,6 +4,8 @@
 
 import {
   buildMatchSources,
+  cleanExerciseDisplay,
+  exerciseIdentityKeys,
   matchExercise,
   parseExerciseRef,
   type MatchSource,
@@ -17,12 +19,12 @@ export interface NameFixProposal {
   action: NameFixAction;
   /** Canonical name it would become / the exercise it would merge into. */
   targetName: string;
-  /** "starter:<name>" (RENAME) or "id:<exerciseId>" (MERGE). Validated again on apply. */
+  /** "starter:<name>" / "clean:<name>" (RENAME) or "id:<exerciseId>" (MERGE). Validated again on apply. */
   targetRef: string;
   confidence: number;
   /** Recorded sets that would stay with the exercise (RENAME) or move (MERGE). */
   entryCount: number;
-  reason: "MISSPELLED" | "DUPLICATE";
+  reason: "MISSPELLED" | "DUPLICATE" | "FORMATTING";
 }
 
 export interface LibraryRow {
@@ -51,25 +53,27 @@ export function reviewExerciseNames(
     const others = active.filter((o) => o.id !== ex.id);
     const sources: MatchSource[] = buildMatchSources(others, starters);
     const m = matchExercise(ex.name, sources);
-    if (m.status !== "EXACT" && m.status !== "HIGH") continue;
-    const top = m.candidates[0];
-    if (!top) continue;
-    const parsed = parseExerciseRef(top.ref);
-    if (!parsed) continue;
+    const cleaned = cleanExerciseDisplay(ex.name);
+    const rename = (targetName: string, targetRef: string, confidence: number, reason: NameFixProposal["reason"]) =>
+      proposals.push({ exerciseId: ex.id, name: ex.name, action: "RENAME", targetName, targetRef, confidence, entryCount: count(ex.id), reason });
+
+    const top = m.status === "EXACT" || m.status === "HIGH" ? m.candidates[0] : undefined;
+    const parsed = top ? parseExerciseRef(top.ref) : null;
+    if (!top || !parsed) {
+      // No close exercise, but the name carries noise (numbering, invisible marks): tidy it.
+      if (cleaned && cleaned !== ex.name.trim()) rename(cleaned, `clean:${cleaned}`, 1, "FORMATTING");
+      continue;
+    }
 
     if (parsed.kind === "starter") {
-      // Already spelled exactly like the canonical exercise: nothing to fix.
-      if (m.status === "EXACT") continue;
-      proposals.push({
-        exerciseId: ex.id,
-        name: ex.name,
-        action: "RENAME",
-        targetName: top.name,
-        targetRef: top.ref,
-        confidence: top.score,
-        entryCount: count(ex.id),
-        reason: "MISSPELLED",
-      });
+      if (m.status === "EXACT") {
+        // Same exercise as the canonical one, written differently ("2. leg Extension"): use the canonical text.
+        if (top.name !== ex.name && exerciseIdentityKeys(ex.name)[0] === exerciseIdentityKeys(top.name)[0]) {
+          rename(top.name, top.ref, 1, "FORMATTING");
+        }
+        continue;
+      }
+      rename(top.name, top.ref, top.score, "MISSPELLED");
       continue;
     }
 

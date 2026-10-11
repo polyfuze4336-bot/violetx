@@ -1,3 +1,5 @@
+import { stripLabelNoise } from "@/lib/exercise-matching";
+
 // Pure WhatsApp message parser. Turns a pasted coach/athlete message into
 // structured, editable fitness data. No IO, no framework — fully unit-testable.
 
@@ -328,7 +330,8 @@ export function parseWhatsAppMessage(
   let headingIndex: number | null = null;
 
   for (const rawLine of text.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
+    // Invisible marks and list numbering ("2. leg extension 10x40") are not part of the data.
+    const trimmed = stripLabelNoise(rawLine);
     if (!trimmed) continue;
     const { text: line, claimed } = stripPrWording(trimmed);
     if (!line) continue;

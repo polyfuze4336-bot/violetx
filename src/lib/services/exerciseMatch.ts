@@ -1,7 +1,7 @@
 import { exerciseEntryRepository, exerciseRepository } from "@/lib/repositories/exercise";
 import { prisma } from "@/lib/db";
 import { NotFoundError } from "@/lib/rbac";
-import { exerciseIdentityKeys, parseExerciseRef } from "@/lib/exercise-matching";
+import { cleanExerciseDisplay, exerciseIdentityKeys, parseExerciseRef } from "@/lib/exercise-matching";
 import { reviewExerciseNames, type NameFixProposal } from "@/lib/exercise-name-review";
 import { starterCreateData } from "@/lib/exercise-library";
 import { requireOwnerAthlete } from "@/lib/services/context";
@@ -108,9 +108,11 @@ export const exerciseMatchService = {
    */
   async applyNameFix(input: { exerciseId: string; action: "RENAME" | "MERGE"; targetRef: string }): Promise<{ name: string }> {
     const { athleteId } = await requireOwnerAthlete();
-    const ref = parseExerciseRef(input.targetRef);
     const library = await exerciseRepository.list(athleteId);
     const source = library.find((l) => l.id === input.exerciseId);
+    // "clean:<name>" only ever means "this exercise's own name without the noise".
+    const cleanName = input.targetRef.startsWith("clean:") ? input.targetRef.slice(6) : null;
+    const ref = cleanName === null ? parseExerciseRef(input.targetRef) : ({ kind: "clean" } as const);
     if (!source || !ref) throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
 
     const MAX_ALIASES = 400;
@@ -119,6 +121,17 @@ export const exerciseMatchService = {
       const next = [aliases, name].filter(Boolean).join(", ");
       return next.length <= MAX_ALIASES ? next : aliases;
     };
+
+    if (ref.kind === "clean") {
+      const expected = cleanExerciseDisplay(source.name);
+      const key = exerciseIdentityKeys(expected)[0];
+      const clash = library.some((l) => l.id !== source.id && exerciseIdentityKeys(l.name, l.aliases).includes(key));
+      if (input.action !== "RENAME" || cleanName !== expected || expected === source.name.trim() || !expected || clash) {
+        throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
+      }
+      await exerciseRepository.update(athleteId, source.id, { name: expected, aliases: addAlias(source.aliases, source.name, { name: expected }) });
+      return { name: expected };
+    }
 
     if (input.action === "RENAME") {
       if (ref.kind !== "starter") throw new NotFoundError("That exercise suggestion is not valid. Review the names again.");
