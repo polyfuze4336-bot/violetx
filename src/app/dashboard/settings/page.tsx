@@ -25,11 +25,12 @@ export default async function SettingsPage() {
     redirect("/dashboard");
   }
 
-  const [profile, types, coach, shareLinks] = await Promise.all([
+  const [profile, types, coach, shareLinks, canManageCoach] = await Promise.all([
     athleteService.getProfile(),
     measurementService.listTypes(),
     userAdminService.getCoach(),
     shareLinkService.list(),
+    userAdminService.canManageCoach(),
   ]);
 
   return (
@@ -77,19 +78,21 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Coach access</CardTitle>
-            <CardDescription>
-              Give your coach a read-only account. They can view your progress
-              but cannot make changes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CoachManager coach={coach} />
-          </CardContent>
-        </Card>
-        <Card>
+        {canManageCoach && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Coach access</CardTitle>
+              <CardDescription>
+                Give your coach a read-only account. They can view your progress
+                but cannot make changes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CoachManager coach={coach} />
+            </CardContent>
+          </Card>
+        )}
+        <Card id="coach-share">
           <CardHeader>
             <CardTitle className="text-base">Share With Coach</CardTitle>
             <CardDescription>

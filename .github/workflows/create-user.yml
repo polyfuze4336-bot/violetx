@@ -1,0 +1,72 @@
+name: Create user account
+
+# MANUAL, one-off. Creates an additional OWNER login with its OWN private athlete
+# (separate data; it cannot see or change anyone else's). An existing account is
+# never modified. The password comes from the NEW_USER_PASSWORD repository secret
+# and is never printed; delete the secret after the run.
+#
+# Required secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+# DATABASE_URL, NEW_USER_PASSWORD (min 12 chars).
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Sign-in email for the new account
+        required: true
+      confirm:
+        description: 'Type "create-user" to confirm'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  create:
+    name: Create account
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ inputs.confirm == 'create-user' }}
+    env:
+      AZURE_RESOURCE_GROUP: rg-violetx
+      AZURE_SQL_SERVER: violetx-sql-v6s4btstixeoe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SQL firewall for runner
+        run: |
+          set -e
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          az sql server firewall-rule create -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" -o none
+
+      - name: Create the account
+        run: npx tsx scripts/create-owner-account.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALLOW_CREATE_USER: "true"
+          NEW_USER_EMAIL: ${{ inputs.email }}
+          NEW_USER_PASSWORD: ${{ secrets.NEW_USER_PASSWORD }}
+
+      - name: Close SQL firewall for runner
+        if: always()
+        run: az sql server firewall-rule delete -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" -o none || true
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true
