@@ -57,7 +57,7 @@ export function ExerciseNameCleanup({ proposals }: { proposals: NameFixProposal[
                 {p.name} <span className="text-muted-foreground">→</span> {p.targetName}
               </p>
               <p className="text-xs text-muted-foreground">
-                {p.reason === "DUPLICATE" ? "Same exercise saved twice" : "Looks misspelled"} · {p.entryCount} recorded set{p.entryCount === 1 ? "" : "s"}
+                {p.reason === "DUPLICATE" ? "Same exercise saved twice" : p.reason === "FORMATTING" ? "Has list numbering or hidden characters" : "Looks misspelled"} · {p.entryCount} recorded set{p.entryCount === 1 ? "" : "s"}
                 {p.action === "MERGE" ? " will move to " + p.targetName : " stay with it"}
               </p>
             </div>
