@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 
 import { passwordResetService } from "@/lib/services/passwordReset";
 import { userAdminService } from "@/lib/services/userAdmin";
+import { registrationService } from "@/lib/services/registration";
 import { runAction, type ActionResult } from "@/lib/actions/helpers";
 import {
   requestResetSchema,
   resetPasswordSchema,
+  type ChangePasswordInput,
+  type RegisterInput,
   type SetCoachInput,
 } from "@/lib/schemas";
 
@@ -36,4 +39,12 @@ export async function setCoachAction(
   const result = await runAction(() => userAdminService.setCoach(input));
   if (result.ok) revalidatePath("/dashboard/settings");
   return result;
+}
+
+export async function registerAction(input: RegisterInput): Promise<ActionResult<{ email: string }>> {
+  return runAction(() => registrationService.register(input));
+}
+
+export async function changePasswordAction(input: ChangePasswordInput): Promise<ActionResult> {
+  return runAction(() => registrationService.changePassword(input));
 }

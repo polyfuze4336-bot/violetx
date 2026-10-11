@@ -3,7 +3,7 @@ import {
   exerciseRepository,
 } from "@/lib/repositories/exercise";
 import { STARTER_EXERCISES, starterCreateData } from "@/lib/exercise-library";
-import { exerciseIdentityKeys } from "@/lib/exercise-matching";
+import { cleanExerciseDisplay, exerciseIdentityKeys } from "@/lib/exercise-matching";
 import { AuthorizationError, NotFoundError } from "@/lib/rbac";
 import {
   requireOwnerAthlete,
@@ -41,7 +41,9 @@ export const exerciseService = {
 
   async create(input: CreateExerciseInput): Promise<ExerciseDTO> {
     const { athleteId } = await requireOwnerAthlete();
-    const data = createExerciseSchema.parse(input);
+    const parsed = createExerciseSchema.parse(input);
+    // One consistent format for every exercise name ("lat pulldown" -> "Lat Pulldown").
+    const data = { ...parsed, name: cleanExerciseDisplay(parsed.name) };
     // Same name or alias, ignoring case, spacing and punctuation
     // ("Lat Pull Down" is "Lat Pulldown").
     const wanted = new Set(exerciseIdentityKeys(data.name));
@@ -93,7 +95,7 @@ export const exerciseService = {
     const { athleteId } = await requireOwnerAthlete();
     const data = updateExerciseSchema.parse(input);
     const count = await exerciseRepository.update(athleteId, data.id, {
-      ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.name !== undefined ? { name: cleanExerciseDisplay(data.name) } : {}),
       ...(data.category !== undefined ? { category: data.category ?? null } : {}),
       ...(data.muscleGroup !== undefined
         ? { muscleGroup: data.muscleGroup ?? null }

@@ -34,3 +34,18 @@ The table lives in one place: `CAPABILITIES` in `src/lib/rbac.ts`. `COACH_SHARE`
 ## Demo and coach share links
 
 See [DEMO-MODE](./DEMO-MODE.md) and the share-link code in `src/lib/services/shareLink.ts`.
+
+## Registration, password change and data wipe
+
+* **Register** (`/register`): email + password (10+ characters, a letter and a number, not common) creates an
+  OWNER account with its OWN private athlete, then signs in. No email verification yet because no email
+  service is connected. Guards: honeypot field, 30 new accounts per hour app-wide, the primary owner's email
+  and the demo email cannot be registered. Switch off with `REGISTRATION_ENABLED=false`.
+* **Change password** (`/dashboard/password`, account menu): needs the current password; wrong guesses share
+  the sign-in lock-out (5 tries, 15 minutes); outstanding reset links are cancelled; the demo account cannot.
+  Other devices stay signed in until their 8-hour session ends.
+* **Forgot password** cannot deliver email in production, so the page says so. Connect an email service to enable it.
+* **Wipe account data**: manual workflow `wipe-account-data.yml` (dry run by default, then type
+  `wipe-my-data`). Removes one OWNER account's recorded data, keeps the login and profile, and can restore the
+  canonical starter exercise library. Never touches other accounts.
+

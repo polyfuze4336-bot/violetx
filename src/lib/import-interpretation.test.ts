@@ -32,7 +32,7 @@ describe("parsing the three WhatsApp behaviours", () => {
       { exercise: "Bench", reps: 9, weightKg: 80 },
       { exercise: "Bench", reps: 8, weightKg: 80 },
     ]);
-    expect(r.sets[3].exercise).toBe("Incline Db");
+    expect(r.sets[3].exercise).toBe("Incline DB");
     expect(r.sets[8]).toEqual({ exercise: "Triceps Pushdown", reps: 10, weightKg: 30 });
     // Only the title is left over; the exercise headings were consumed.
     expect(r.unparsedLines).toEqual(["Push day"]);

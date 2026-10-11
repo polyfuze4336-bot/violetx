@@ -42,11 +42,22 @@ export default function ForgotPasswordPage() {
           </div>
           <CardTitle className="text-xl">Reset your password</CardTitle>
           <CardDescription>
-            Enter your email and we&apos;ll create a reset link.
+            {process.env.NODE_ENV === "production" ? "Email reset is not connected yet." : "Enter your email and we'll create a reset link."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {submitted ? (
+          {process.env.NODE_ENV === "production" ? (
+            // No email service is connected yet, so a reset link cannot be delivered.
+            <div className="space-y-4 text-center text-sm">
+              <p className="text-muted-foreground">
+                Password reset by email is not available yet. If you can still sign in, change your password from the account menu (top right) under
+                &quot;Change password&quot;. Otherwise ask the account owner to reset it for you.
+              </p>
+              <Link href="/signin" className="text-muted-foreground hover:text-foreground">
+                Back to sign in
+              </Link>
+            </div>
+          ) : submitted ? (
             <div className="space-y-4 text-center text-sm">
               <p className="text-muted-foreground">
                 If an account exists for that email, a reset link has been

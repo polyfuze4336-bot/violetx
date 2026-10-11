@@ -101,6 +101,15 @@ export class AuthenticationError extends Error {
   }
 }
 
+/** Error for input that is understood but not acceptable (shown to the user as is). */
+export class ValidationError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 /** Error thrown when a requested or scoped resource does not exist. */
 export class NotFoundError extends Error {
   readonly status = 404;

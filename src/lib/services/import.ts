@@ -6,6 +6,7 @@ import {
   buildMatchSources,
   exerciseIdentityKeys,
   matchExercise,
+  cleanExerciseDisplay,
   parseExerciseRef,
   stripLabelNoise,
 } from "@/lib/exercise-matching";
@@ -111,7 +112,7 @@ async function resolveExerciseForCommit(
     const created = await tx.exercise.create({
       data: starter
         ? { athleteId, ...starterCreateData(starter, ref && exerciseIdentityKeys(typed)[0] !== exerciseIdentityKeys(starter.name)[0] ? typed : undefined) }
-        : { athleteId, name: typed },
+        : { athleteId, name: cleanExerciseDisplay(typed) },
       select: { id: true, name: true, aliases: true },
     });
     newExercises.push(created.name);

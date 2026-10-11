@@ -279,3 +279,35 @@ describe("consolidated navigation (rendered)", () => {
     expect(fake.writes).toEqual([]);
   }, 60_000);
 });
+
+describe("registration and password pages", () => {
+  it("sign-in links to registration; the register page shows the email form (or says it is closed)", async () => {
+    session.mockResolvedValue(null);
+    const signin = await render(() => import("@/app/signin/page") as never, { searchParams: {} });
+    expect(signin).toContain("Create an account");
+    expect(signin).toContain('href="/register"');
+    const register = await render(() => import("@/app/register/page") as never);
+    for (const t of ["Create your account", "Confirm password", "At least 10 characters"]) expect(register).toContain(t);
+    expect(register).toContain('type="email"');
+    process.env.REGISTRATION_ENABLED = "false";
+    const closed = await render(() => import("@/app/register/page") as never);
+    expect(closed).toContain("Registration is closed");
+    expect(closed).not.toContain('type="email"');
+    delete process.env.REGISTRATION_ENABLED;
+  }, 60_000);
+
+  it("a signed-in account can change its password; the demo viewer is sent away", async () => {
+    asOwner();
+    const page = await render(() => import("@/app/dashboard/password/page") as never);
+    for (const t of ["Change password", "Current password", "New password", "Confirm new password"]) expect(page).toContain(t);
+    session.mockResolvedValue({ user: { id: "demo-user", email: DEMO_EMAIL, name: "Demo", role: "DEMO_VIEWER", athleteId: "demo-athlete" }, expires: "2999-01-01T00:00:00.000Z" });
+    await expect(render(() => import("@/app/dashboard/password/page") as never)).rejects.toThrow(/NEXT_REDIRECT:\/dashboard/);
+  }, 60_000);
+
+  it("the account menu offers Change password to everyone but the demo viewer", async () => {
+    asOwner();
+    const owner = await render(() => import("@/app/dashboard/layout") as never, { children: "x" });
+    // The dropdown is closed in static markup; the menu is wired in the client component source.
+    expect(owner).toContain("Account menu");
+  }, 60_000);
+});

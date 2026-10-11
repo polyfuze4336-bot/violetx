@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "crypto";
 
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { ROLES } from "@/lib/rbac";
+import { ROLES, ValidationError } from "@/lib/rbac";
 
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -44,12 +44,12 @@ export const passwordResetService = {
       where: { tokenHash: sha256(token) },
     });
     if (!record || record.usedAt || record.expiresAt < new Date()) {
-      throw new Error("This reset link is invalid or has expired.");
+      throw new ValidationError("This reset link is invalid or has expired.");
     }
 
     const target = await prisma.user.findUnique({ where: { id: record.userId } });
     if (target?.role === ROLES.DEMO_VIEWER) {
-      throw new Error("This reset link is invalid or has expired.");
+      throw new ValidationError("This reset link is invalid or has expired.");
     }
 
     const passwordHash = await hashPassword(newPassword);

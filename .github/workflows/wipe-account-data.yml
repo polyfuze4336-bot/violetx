@@ -1,0 +1,100 @@
+name: Wipe account data
+
+# MANUAL and destructive. Deletes everything one OWNER account has recorded
+# (workouts, sets, weights, measurements, nutrition, check-ins, goals, notes, gym
+# visits, share links, programs, imports and exercises) and keeps the login and
+# profile. It is a DRY RUN (counts only) unless dry_run is switched off AND the
+# confirmation text is typed. Leave `email` empty to use the app's OWNER_EMAIL.
+#
+# Required secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+# AZURE_WEBAPP_NAME, DATABASE_URL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Account to wipe (empty = the primary owner, OWNER_EMAIL)
+        required: false
+        default: ''
+      dry_run:
+        description: Only count what would be deleted
+        type: boolean
+        default: true
+      reseed_starter:
+        description: Restore the canonical starter exercise library afterwards
+        type: boolean
+        default: true
+      confirm:
+        description: 'To delete for real, type "wipe-my-data" (and untick dry_run)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  wipe:
+    name: Wipe account data
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AZURE_RESOURCE_GROUP: rg-violetx
+      AZURE_SQL_SERVER: violetx-sql-v6s4btstixeoe
+    steps:
+      - name: Check the confirmation
+        if: ${{ inputs.dry_run == false && inputs.confirm != 'wipe-my-data' }}
+        run: |
+          echo "Not confirmed: type wipe-my-data to delete for real."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve the target account
+        id: target
+        run: |
+          set -e
+          EMAIL="${{ inputs.email }}"
+          if [ -z "$EMAIL" ]; then
+            EMAIL=$(az webapp config appsettings list -g "$AZURE_RESOURCE_GROUP" -n "${{ secrets.AZURE_WEBAPP_NAME }}" --query "[?name=='OWNER_EMAIL'].value | [0]" -o tsv)
+          fi
+          if [ -z "$EMAIL" ]; then echo "No email given and OWNER_EMAIL is not set."; exit 1; fi
+          echo "::add-mask::$EMAIL"
+          echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+
+      - name: Open SQL firewall for runner
+        run: |
+          set -e
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          az sql server firewall-rule create -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" -o none
+
+      - name: Wipe (or count)
+        run: npx tsx scripts/wipe-account-data.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALLOW_WIPE: "true"
+          TARGET_EMAIL: ${{ steps.target.outputs.email }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RESEED_STARTER: ${{ inputs.reseed_starter }}
+
+      - name: Close SQL firewall for runner
+        if: always()
+        run: az sql server firewall-rule delete -g "$AZURE_RESOURCE_GROUP" -s "$AZURE_SQL_SERVER" -n "gh-runner-${{ github.run_id }}" -o none || true
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true

@@ -141,12 +141,45 @@ export function stripLabelNoise(raw: string): string {
     .trim();
 }
 
-/** A name as it should be displayed: no noise, each word starting with a capital. */
-export function cleanExerciseDisplay(raw: string): string {
-  return stripLabelNoise(raw)
+// Equipment and movement abbreviations that stay in capitals ("Incline DB Press").
+const ACRONYMS = new Set(["db", "bb", "ez", "ohp", "rdl", "trx", "kb", "ssb", "pnf", "rpe", "amrap", "emom"]);
+
+/**
+ * The one way exercise names are written everywhere (imports, typing, saved
+ * data): Title Case, known abbreviations in capitals, hyphen and bracket parts
+ * capitalised ("Chin-Up", "Chest Press (Machine)").
+ *  - A name typed entirely in lower or upper case is fully normalised.
+ *  - A mixed-case name keeps capitals the author chose; only lower-case word
+ *    starts are fixed ("leg Extension" -> "Leg Extension", "HIIT bike" -> "HIIT Bike").
+ */
+export function formatExerciseName(raw: string): string {
+  const name = raw.replace(/\s+/g, " ").trim();
+  if (!name) return "";
+  const uniform = name === name.toLowerCase() || name === name.toUpperCase();
+  return name
     .split(" ")
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .map((word) =>
+      word
+        .split(/([-(])/)
+        .map((seg) => {
+          if (!seg || seg === "-" || seg === "(") return seg;
+          const letters = seg.replace(/[^A-Za-z]/g, "").toLowerCase();
+          if (ACRONYMS.has(letters)) return seg.toUpperCase();
+          const first = seg.search(/[A-Za-z]/);
+          // "21s", "5x5": a number prefix is not a word start.
+          if (first === -1 || first > 0 && /^\d/.test(seg)) return uniform ? seg.toLowerCase() : seg;
+          const head = seg.slice(0, first + 1).toUpperCase();
+          const rest = seg.slice(first + 1);
+          return head + (uniform ? rest.toLowerCase() : rest);
+        })
+        .join("")
+    )
     .join(" ");
+}
+
+/** A saved/typed name without noise, in the standard format. */
+export function cleanExerciseDisplay(raw: string): string {
+  return formatExerciseName(stripLabelNoise(raw));
 }
 
 /** lowercase, strip accents, punctuation -> spaces, collapse spaces, canonical tokens. */

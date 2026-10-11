@@ -4,6 +4,7 @@ import {
   AuthenticationError,
   AuthorizationError,
   NotFoundError,
+  ValidationError,
 } from "@/lib/rbac";
 
 export type ActionResult<T = void> =
@@ -37,7 +38,8 @@ export async function runAction<T>(
     if (
       error instanceof AuthorizationError ||
       error instanceof AuthenticationError ||
-      error instanceof NotFoundError
+      error instanceof NotFoundError ||
+      error instanceof ValidationError
     ) {
       return { ok: false, error: error.message };
     }

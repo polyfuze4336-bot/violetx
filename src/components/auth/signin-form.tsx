@@ -86,7 +86,13 @@ export function SignInForm({
           {busy ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-      <div className="text-center text-sm">
+      <div className="space-y-2 text-center text-sm">
+        <p className="text-muted-foreground">
+          New here?{" "}
+          <Link href="/register" className="font-medium text-primary hover:underline">
+            Create an account
+          </Link>
+        </p>
         <Link href="/forgot-password" className="text-muted-foreground hover:text-foreground">
           Forgot password?
         </Link>

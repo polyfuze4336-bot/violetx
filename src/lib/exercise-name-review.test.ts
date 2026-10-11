@@ -11,7 +11,7 @@ vi.mock("@/lib/db", () => ({
 import { getServerSession } from "next-auth";
 
 import { reviewExerciseNames } from "@/lib/exercise-name-review";
-import { cleanExerciseDisplay, normalizeExerciseName, stripLabelNoise } from "@/lib/exercise-matching";
+import { cleanExerciseDisplay, formatExerciseName, normalizeExerciseName, stripLabelNoise } from "@/lib/exercise-matching";
 import { STARTER_EXERCISES } from "@/lib/exercise-library";
 import { AuthenticationError, AuthorizationError, NotFoundError } from "@/lib/rbac";
 import { exerciseMatchService } from "@/lib/services/exerciseMatch";
@@ -54,6 +54,41 @@ describe("reviewing saved exercise names (pure)", () => {
     const out = reviewExerciseNames([lib("a", "Sled Pushh"), lib("b", "Sled Push")], [], new Map([["a", 1], ["b", 5]]));
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ exerciseId: "a", action: "MERGE", targetName: "Sled Push" });
+  });
+});
+
+describe("one consistent format for exercise names", () => {
+  it("leaves every canonical exercise exactly as written", () => {
+    for (const s of STARTER_EXERCISES) expect(formatExerciseName(s.name), s.name).toBe(s.name);
+  });
+
+  it("normalises lower, upper and mixed case the same way every time", () => {
+    const cases: [string, string][] = [
+      ["lat pulldown", "Lat Pulldown"],
+      ["LAT PULLDOWN", "Lat Pulldown"],
+      ["Lat pulldown", "Lat Pulldown"],
+      ["leg Extension", "Leg Extension"],
+      ["  bench   press ", "Bench Press"],
+      ["incline db press", "Incline DB Press"],
+      ["INCLINE DB PRESS", "Incline DB Press"],
+      ["ez bar curl", "EZ Bar Curl"],
+      ["assisted chin-up", "Assisted Chin-Up"],
+      ["t-bar row", "T-Bar Row"],
+      ["chest press (machine)", "Chest Press (Machine)"],
+      ["farmer's carry", "Farmer's Carry"],
+      ["HIIT bike", "HIIT Bike"],
+      ["21s bicep curl", "21s Bicep Curl"],
+    ];
+    for (const [input, out] of cases) expect(formatExerciseName(input), input).toBe(out);
+    // Idempotent: formatting twice changes nothing.
+    for (const [, out] of cases) expect(formatExerciseName(out)).toBe(out);
+  });
+
+  it("flags saved names whose only problem is case so they can be tidied", () => {
+    const out = reviewExerciseNames([lib("1", "LAT PULLDOWN"), lib("2", "sled drag"), lib("3", "Sled Pull")], STARTER_EXERCISES, new Map());
+    expect(out.find((p) => p.exerciseId === "1")).toMatchObject({ action: "RENAME", targetName: "Lat Pulldown", reason: "FORMATTING" });
+    expect(out.find((p) => p.exerciseId === "2")).toMatchObject({ targetName: "Sled Drag", targetRef: "clean:Sled Drag" });
+    expect(out.some((p) => p.exerciseId === "3")).toBe(false);
   });
 });
 

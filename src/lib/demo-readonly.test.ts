@@ -69,7 +69,8 @@ const ALLOWED_READS = new Set(["generateAiCoachTipsAction"]);
 /** Chat actions are tested separately with realistic text (questions are allowed). */
 const CHAT = new Set(["violetInterpretAction"]);
 /** Pre-login flows: must not change the demo account either (checked separately). */
-const AUTH_FLOWS = new Set(["requestPasswordResetAction", "resetPasswordAction"]);
+// Public pre-login flows (they act on a new or anonymous account, never on the demo athlete).
+const AUTH_FLOWS = new Set(["requestPasswordResetAction", "resetPasswordAction", "registerAction"]);
 
 describe("the demo viewer cannot reach any mutation through server actions", () => {
   it("covers every exported server action", async () => {

@@ -272,6 +272,40 @@ export const commitImportSchema = z.object({
 });
 export type CommitImportInput = z.input<typeof commitImportSchema>;
 
+// Registration and password change -----------------------------------------------
+
+const COMMON_PASSWORDS = new Set(["password", "password1", "12345678", "123456789", "1234567890", "qwerty123", "iloveyou", "violetx", "violetx123", "letmein123"]);
+
+/** New passwords: 10+ characters, a letter and a number, not trivially common. */
+export const newPasswordSchema = z
+  .string()
+  .min(10, "Use at least 10 characters.")
+  .max(200, "That password is too long.")
+  .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), "Include at least one letter and one number.")
+  .refine((p) => !COMMON_PASSWORDS.has(p.toLowerCase()), "That password is too common.");
+
+export const registerSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254),
+    password: newPasswordSchema,
+    confirmPassword: z.string(),
+    /** Honeypot: real people never fill this in. */
+    website: z.string().max(200).optional(),
+  })
+  .refine((d) => d.password === d.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match." })
+  .refine((d) => d.password.toLowerCase() !== d.email, { path: ["password"], message: "The password cannot be your email." });
+export type RegisterInput = z.input<typeof registerSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password.").max(200),
+    newPassword: newPasswordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match." })
+  .refine((d) => d.newPassword !== d.currentPassword, { path: ["newPassword"], message: "Choose a password you have not used just now." });
+export type ChangePasswordInput = z.input<typeof changePasswordSchema>;
+
 // Feedback -------------------------------------------------------------------
 
 export const FEEDBACK_KINDS = ["BUG", "FEATURE"] as const;
@@ -311,7 +345,7 @@ export type RequestResetInput = z.infer<typeof requestResetSchema>;
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1),
-  password: passwordSchema,
+  password: newPasswordSchema,
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 

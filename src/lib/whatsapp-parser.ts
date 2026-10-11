@@ -1,4 +1,4 @@
-import { stripLabelNoise } from "@/lib/exercise-matching";
+import { formatExerciseName, stripLabelNoise } from "@/lib/exercise-matching";
 
 // Pure WhatsApp message parser. Turns a pasted coach/athlete message into
 // structured, editable fitness data. No IO, no framework — fully unit-testable.
@@ -297,7 +297,7 @@ function makeSet(
   repsRaw: string,
   weightRaw: string
 ): ParsedExerciseSet | null {
-  const exercise = titleCase(nameRaw);
+  const exercise = formatExerciseName(nameRaw);
   const reps = Number(repsRaw);
   const weightKg = Number(weightRaw.replace(",", "."));
   if (
@@ -379,7 +379,7 @@ export function parseWhatsAppMessage(
 
     // Words only: may head the sets on the lines below it.
     if (HEADING_LINE.test(line)) {
-      current = titleCase(line);
+      current = formatExerciseName(line);
       headingIndex = result.unparsedLines.length;
     }
     result.unparsedLines.push(line);

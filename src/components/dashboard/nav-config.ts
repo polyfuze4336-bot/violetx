@@ -5,6 +5,7 @@ import {
   HeartPulse,
   History,
   Home,
+  KeyRound,
   LineChart,
   Map,
   MessageSquareText,
@@ -181,6 +182,7 @@ export const MORE_GROUPS: MoreGroup[] = [
     title: "Account",
     items: [
       { href: "/dashboard/settings", label: "Settings & profile", description: "Profile, units and preferences", icon: Settings, ownerOnly: true },
+      { href: "/dashboard/password", label: "Change password", description: "Update your sign-in password", icon: KeyRound, ownerOnly: true },
       { href: "/dashboard/feedback", label: "Report a bug / request a feature", description: "Tell us what to fix or build next", icon: MessageSquareWarning, ownerOnly: true },
     ],
   },

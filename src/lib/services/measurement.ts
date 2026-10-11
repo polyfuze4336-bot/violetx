@@ -1,3 +1,4 @@
+import { formatExerciseName } from "@/lib/exercise-matching";
 import {
   measurementEntryRepository,
   measurementTypeRepository,
@@ -36,7 +37,9 @@ export const measurementService = {
     input: CreateMeasurementTypeInput
   ): Promise<MeasurementTypeDTO> {
     const { athleteId } = await requireOwnerAthlete();
-    const data = createMeasurementTypeSchema.parse(input);
+    const parsed = createMeasurementTypeSchema.parse(input);
+    // Same capitalisation everywhere ("upper arm" -> "Upper Arm").
+    const data = { ...parsed, name: formatExerciseName(parsed.name) };
     const existing = await measurementTypeRepository.findByName(
       athleteId,
       data.name
@@ -58,7 +61,7 @@ export const measurementService = {
     const { athleteId } = await requireOwnerAthlete();
     const data = updateMeasurementTypeSchema.parse(input);
     const count = await measurementTypeRepository.update(athleteId, data.id, {
-      ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.name !== undefined ? { name: formatExerciseName(data.name) } : {}),
       ...(data.defaultUnit !== undefined
         ? { defaultUnit: data.defaultUnit }
         : {}),
