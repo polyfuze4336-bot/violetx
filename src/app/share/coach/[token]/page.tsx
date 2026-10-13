@@ -45,7 +45,7 @@ export const metadata: Metadata = {
 const KIND_STYLE: Record<string, string> = {
   WEIGHT: "bg-primary/10 text-primary",
   ASSISTANCE: "bg-primary/10 text-primary",
-  REPS: "bg-magenta/10 text-magenta",
+  REPS: "bg-rep/10 text-rep",
   E1RM: "bg-success/10 text-success",
 };
 
@@ -141,7 +141,7 @@ export default async function CoachSharePage({
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Weight PRs" icon={Trophy} value={String(data.prCounts.WEIGHT)} />
-          <StatCard label="Rep PRs" icon={Trophy} accent="magenta" value={String(data.prCounts.REPS)} />
+          <StatCard label="Rep PRs" icon={Trophy} accent="rep" value={String(data.prCounts.REPS)} />
           <StatCard label="Est. 1RM PRs" icon={Trophy} accent="success" value={String(data.prCounts.E1RM)} />
           <StatCard label="Assistance PRs" icon={Trophy} value={String(data.prCounts.ASSISTANCE)} hint={`${totalPrs} PRs in total`} />
         </section>

@@ -104,7 +104,7 @@ function compute(
     tips,
     lastTrainingDate,
     series: buildExerciseSeries(rows),
-    matrix: buildProgressMatrix(rows, period, 6, now),
+    matrix: buildProgressMatrix(rows, period, "all", now),
   };
 }
 
@@ -120,7 +120,7 @@ export const trainingProgressService = {
     const { periods } = compute(rows, prEvents, "month", now);
     return {
       series: buildExerciseSeries(rows),
-      matrix: buildProgressMatrix(rows, "month", 6, now),
+      matrix: buildProgressMatrix(rows, "month", "all", now),
       perDay: setsPerDay(rows),
       months: periods,
       prEvents,

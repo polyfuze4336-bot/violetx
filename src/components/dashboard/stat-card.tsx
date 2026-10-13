@@ -18,12 +18,13 @@ export function StatCard({
   hint?: string;
   icon?: LucideIcon;
   trend?: "up" | "down" | "neutral";
-  accent?: "primary" | "magenta" | "success";
+  accent?: "primary" | "magenta" | "success" | "rep";
 }) {
   const accentClasses = {
     primary: "bg-primary/10 text-primary",
     magenta: "bg-magenta/10 text-magenta",
     success: "bg-success/10 text-success",
+    rep: "bg-rep/10 text-rep",
   }[accent];
 
   return (

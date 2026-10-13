@@ -38,6 +38,27 @@ export function ExerciseNameCleanup({ proposals }: { proposals: NameFixProposal[
     });
   }
 
+  // One at a time: a merge can change what a later proposal points at, and the
+  // server re-validates each one. Stops at the first failure.
+  function applyAll() {
+    setBusy("all");
+    startTransition(async () => {
+      let done = 0;
+      for (const p of open) {
+        const res = await applyExerciseNameFixAction({ exerciseId: p.exerciseId, action: p.action, targetRef: p.targetRef });
+        if (!res.ok) {
+          toast({ title: `Stopped after ${done} correction(s)`, description: `${p.name}: ${res.error}`, variant: "destructive" });
+          break;
+        }
+        done += 1;
+        setDismissed((d) => new Set(d).add(p.exerciseId));
+      }
+      setBusy(null);
+      if (done > 0) toast({ title: `${done} exercise name(s) corrected`, description: "Your history was kept." });
+      router.refresh();
+    });
+  }
+
   return (
     <Card className="border-amber-300/60 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
       <CardHeader>
@@ -50,6 +71,11 @@ export function ExerciseNameCleanup({ proposals }: { proposals: NameFixProposal[
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {open.length > 1 && (
+          <Button size="sm" onClick={applyAll} disabled={busy !== null}>
+            {busy === "all" ? "Applying…" : `Apply all ${open.length} corrections`}
+          </Button>
+        )}
         {open.map((p) => (
           <div key={p.exerciseId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
             <div className="min-w-0 text-sm">

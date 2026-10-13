@@ -95,7 +95,7 @@ export default async function RecordsPage() {
               key={i}
               className="flex min-w-[9.5rem] shrink-0 flex-col gap-1 rounded-xl border bg-card p-3"
             >
-              <Trophy className={cn("h-4 w-4", e.type === "REPS" ? "text-magenta" : "text-primary")} />
+              <Trophy className={cn("h-4 w-4", e.type === "REPS" ? "text-rep" : "text-primary")} />
               <p className="truncate text-sm font-semibold">{e.exerciseName}</p>
               <p className="text-lg font-bold tabular-nums">
                 {formatNumber(e.weightKg)}

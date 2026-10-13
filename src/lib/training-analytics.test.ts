@@ -203,7 +203,7 @@ describe("buildProgressMatrix", () => {
   });
 
   it("computes the overall trend and baselines", () => {
-    expect(byName["Chest Press (Machine)"].trend).toEqual({ kind: "up", deltaKg: 18, pct: 78 });
+    expect(byName["Chest Press (Machine)"].trend).toMatchObject({ kind: "up", deltaKg: 18, pct: 78 });
     expect(byName["Lat Pulldown"].trend.kind).toBe("baseline");
     expect(byName["Lat Pulldown"].cells[1]?.isPr).toBe(true);
   });

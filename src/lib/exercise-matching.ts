@@ -74,6 +74,19 @@ const RAW_MISSPELLINGS: Record<string, string> = {
   cabel: "cable",
   caable: "cable",
   pres: "press",
+  // Seen in real WhatsApp gym logs.
+  seates: "seated",
+  calrf: "calf",
+  ovehead: "overhead",
+  tciep: "triceps",
+  tcipesa: "triceps",
+  exten: "extension",
+  pect: "pec",
+  singe: "single",
+  bertical: "vertical",
+  abducttuon: "abduction",
+  addxution: "adduction",
+  pressdown: "pushdown",
 };
 
 // Words that change WHICH exercise it is (equipment / variation / direction).
@@ -322,6 +335,41 @@ function classify(ranked: ExerciseCandidate[]): MatchStatus {
 
 const MAX_CANDIDATES = 5;
 
+/** Every normalised word used by a canonical name/alias, plus the qualifier words. */
+function vocabularyOf(sources: MatchSource[]): Set<string> {
+  const vocab = new Set<string>(QUALIFIERS);
+  for (const s of sources) for (const key of exerciseLookupKeys(s.name, s.aliases)) for (const t of key.split(" ")) vocab.add(t);
+  return vocab;
+}
+
+/**
+ * Replace each unknown word by the single closest known word (1 edit for words
+ * of 5-7 letters, 2 for longer ones, same first letter). Ties are left alone:
+ * with two equally close words nothing is guessed.
+ */
+function correctUnknownTokens(norm: string, vocab: Set<string>): string {
+  return norm
+    .split(" ")
+    .map((t) => {
+      if (vocab.has(t) || t.length < 5 || /\d/.test(t)) return t;
+      const maxEd = t.length >= 8 ? 2 : 1;
+      let best: string | null = null;
+      let bestD = maxEd + 1;
+      let tie = false;
+      vocab.forEach((v) => {
+        if (v.length < 4 || v[0] !== t[0] || Math.abs(v.length - t.length) > maxEd) return;
+        const d = editDistance(t, v);
+        if (d < bestD) {
+          best = v;
+          bestD = d;
+          tie = false;
+        } else if (d === bestD) tie = true;
+      });
+      return best && !tie ? best : t;
+    })
+    .join(" ");
+}
+
 /**
  * Steps 1-3 of the matching workflow. EXACT means the normalised name (or its
  * space-insensitive form) equals a canonical name or alias, so no guessing was
@@ -364,8 +412,25 @@ export function matchExercise(input: string, sources: MatchSource[]): ExerciseMa
     }
   }
 
-  // Step 3b: fuzzy.
-  const ranked = rank(norm, sources);
+  // Step 3a (b): fix words that are not exercise vocabulary by their one clearly
+  // nearest known word ("addxution" -> "adduction", "ovehead" -> "overhead").
+  const vocab = vocabularyOf(sources);
+  const base = corrected !== norm ? normalizeExerciseName(corrected) || norm : norm;
+  const fixed = correctUnknownTokens(base, vocab);
+  if (fixed !== norm) {
+    const fc = compact(fixed);
+    const hits = sources.filter((s) => exerciseLookupKeys(s.name, s.aliases).some((k) => compact(k) === fc));
+    if (hits.length === 1) {
+      return {
+        input,
+        status: "HIGH",
+        candidates: [{ ref: hits[0].ref, name: hits[0].name, score: 0.95, via: fixed, source: hits[0].source, origin: "deterministic" }],
+      };
+    }
+  }
+
+  // Step 3b: fuzzy (on the vocabulary-corrected text, so qualifier words are read right).
+  const ranked = rank(fixed, sources);
   const status = classify(ranked);
   return { input, status, candidates: ranked.filter((c) => c.score >= 0.5).slice(0, MAX_CANDIDATES) };
 }

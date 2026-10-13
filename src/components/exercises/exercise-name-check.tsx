@@ -38,16 +38,20 @@ export function useExerciseSuggestions(names: string[]) {
     if (todo.length === 0) return;
     const timer = setTimeout(async () => {
       todo.forEach((n) => asked.current.add(normalizeExerciseName(n)));
-      const res = await suggestExercisesAction(todo);
-      if (!res.ok) {
-        todo.forEach((n) => asked.current.delete(normalizeExerciseName(n)));
-        return;
+      // The server caps one request, so long chats are checked in batches.
+      for (let i = 0; i < todo.length; i += 50) {
+        const batch = todo.slice(i, i + 50);
+        const res = await suggestExercisesAction(batch);
+        if (!res.ok) {
+          batch.forEach((n) => asked.current.delete(normalizeExerciseName(n)));
+          continue;
+        }
+        setByKey((prev) => {
+          const next = { ...prev };
+          for (const s of res.data) next[normalizeExerciseName(s.input)] = s;
+          return next;
+        });
       }
-      setByKey((prev) => {
-        const next = { ...prev };
-        for (const s of res.data) next[normalizeExerciseName(s.input)] = s;
-        return next;
-      });
     }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

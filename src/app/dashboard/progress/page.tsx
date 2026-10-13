@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { trainingProgressService } from "@/lib/services/trainingProgress";
 import { personalRecordService } from "@/lib/services/personalRecord";
 import { prEventDetail } from "@/lib/analytics";
+import { prBadgeClass } from "@/lib/pr-tone";
 import {
   HYPERTROPHY_SETS_MAX,
   HYPERTROPHY_SETS_MIN,
@@ -130,7 +131,7 @@ export default async function TrainingProgressPage({
                           {formatNumber(p.weightKg)} kg{p.assisted ? " assistance" : ""} × {p.reps} · {d.detail} · {formatDate(p.date)}
                         </span>
                       </span>
-                      <span className="shrink-0 rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">{d.label.toUpperCase()}</span>
+                      <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", prBadgeClass(p.type))}>{d.label.toUpperCase()}</span>
                     </li>
                   );
                 })}

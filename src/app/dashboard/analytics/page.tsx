@@ -172,7 +172,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: { 
               {a.prTimeline.slice(0, 8).map((p, i) => (
                 <li key={i} className="flex items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-2">
-                    <Trophy className={cn("h-4 w-4", p.type === "REPS" ? "text-magenta" : "text-primary")} />
+                    <Trophy className={cn("h-4 w-4", p.type === "REPS" ? "text-rep" : "text-primary")} />
                     <span className="font-medium">{p.exerciseName}</span>
                   </span>
                   <span className="tabular-nums text-muted-foreground">

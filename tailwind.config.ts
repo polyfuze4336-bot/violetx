@@ -44,6 +44,10 @@ const config: Config = {
           DEFAULT: "hsl(var(--magenta))",
           foreground: "hsl(var(--magenta-foreground))",
         },
+        // Rep gains: a cool blue, distinct from load gains (green) and PR accents.
+        rep: {
+          DEFAULT: "hsl(var(--rep))",
+        },
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",

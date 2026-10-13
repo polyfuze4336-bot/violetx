@@ -42,11 +42,29 @@ function Cell({ cell, assisted }: { cell: MatrixCell | null; assisted: boolean }
       </span>
       {assisted && <span className="text-[11px] font-normal italic text-muted-foreground">assist</span>}
       {cell.improved === true && (
-        <span className="text-[11px] text-success">
+        <span className={cn("text-[11px] font-semibold", cell.repDelta ? "text-rep" : "text-success")}>
           ▲{cell.repDelta ? ` +${cell.repDelta} rep${cell.repDelta === 1 ? "" : "s"}` : ""}
         </span>
       )}
       {cell.improved === false && <span className="text-[11px] text-magenta">▼</span>}
+    </span>
+  );
+}
+
+/** Where the lift started and where it is now, across all recorded data. */
+function Journey({ row, labelOf }: { row: MatrixRow; labelOf: (key: string) => string }) {
+  const { first, last } = row.trend;
+  if (!first || !last) return null;
+  const fmtSet = (s: { weightKg: number; reps: number }) => `${formatNumber(s.weightKg, 2)} kg × ${s.reps}`;
+  return (
+    <span className="mt-1 block whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+      Start ({labelOf(first.key)}): {fmtSet(first)}
+      {row.trend.kind !== "baseline" && (
+        <>
+          <br />
+          Now ({labelOf(last.key)}): {fmtSet(last)}
+        </>
+      )}
     </span>
   );
 }
@@ -62,7 +80,7 @@ function Trend({ row }: { row: MatrixRow }) {
   }
   if (kind === "reps") {
     return (
-      <span className="inline-flex flex-col rounded-xl bg-gradient-to-br from-success/25 to-success/5 px-3 py-1.5 text-sm font-bold leading-tight tabular-nums text-success">
+      <span className="inline-flex flex-col rounded-xl bg-gradient-to-br from-rep/25 to-rep/5 px-3 py-1.5 text-sm font-bold leading-tight tabular-nums text-rep">
         <span>▲ +{row.trend.repDelta} rep{row.trend.repDelta === 1 ? "" : "s"}</span>
         <span className="text-xs font-semibold opacity-80">at {formatNumber(row.trend.atKg ?? 0, 2)} kg{row.assisted ? " assist" : ""}</span>
       </span>
@@ -101,11 +119,25 @@ function Trend({ row }: { row: MatrixRow }) {
   );
 }
 
+function RepGain({ row }: { row: MatrixRow }) {
+  const g = row.trend.repGainAtBaseline;
+  if (!g || row.trend.kind === "reps") return null;
+  return (
+    <span className="mt-1 inline-flex flex-col rounded-xl bg-rep/10 px-3 py-1 text-xs font-bold leading-tight tabular-nums text-rep">
+      <span>▲ +{g.to - g.from} reps</span>
+      <span className="font-semibold opacity-80">
+        {g.from} → {g.to} at {formatNumber(g.atKg, 2)} kg{row.assisted ? " assist" : ""}
+      </span>
+    </span>
+  );
+}
+
 /** Exercise × period table of best sets with PR glow and overall trend. */
 export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
   if (matrix.rows.length === 0) {
-    return <p className="p-6 text-center text-sm text-muted-foreground">No sets in this window.</p>;
+    return <p className="p-6 text-center text-sm text-muted-foreground">No sets logged yet.</p>;
   }
+  const labelOf = (key: string) => matrix.columns.find((c) => c.key === key)?.label ?? key;
   return (
     <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
       <table className="w-full min-w-[46rem] border-collapse text-sm">
@@ -114,6 +146,7 @@ export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
             <th className="sticky left-0 z-10 bg-brand-gradient px-4 py-3 text-xs font-semibold uppercase tracking-wide">
               Exercise
             </th>
+            <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Since the start</th>
             {matrix.columns.map((c) => (
               <th key={c.key} className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">
                 <span className="flex items-center gap-1.5 whitespace-nowrap">
@@ -126,7 +159,6 @@ export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
                 </span>
               </th>
             ))}
-            <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide">Overall trend</th>
           </tr>
         </thead>
         <tbody>
@@ -154,14 +186,16 @@ export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
                     )}
                   </span>
                 </th>
+                <td className="px-3 py-2.5 align-middle">
+                  <Trend row={row} />
+                  <RepGain row={row} />
+                  <Journey row={row} labelOf={labelOf} />
+                </td>
                 {row.cells.map((cell, i) => (
                   <td key={i} className="px-3 py-2.5 align-middle">
                     <Cell cell={cell} assisted={row.assisted} />
                   </td>
                 ))}
-                <td className="px-3 py-2.5 align-middle">
-                  <Trend row={row} />
-                </td>
               </tr>
             );
           })}
@@ -169,7 +203,12 @@ export function ProgressMatrix({ matrix }: { matrix: ProgressMatrixData }) {
       </table>
       <p className="flex items-center gap-2 border-t px-4 py-2 text-[11px] text-muted-foreground">
         <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_8px_hsl(var(--success))]" />
-        Personal best in this window · best set per period (heaviest, then most reps)
+        Personal best · best set per period (heaviest, then most reps) · from your first logged set
+      </p>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 text-[11px] text-muted-foreground">
+        <span><span className="font-semibold text-success">▲ green</span> = heavier (or less assistance)</span>
+        <span><span className="font-semibold text-rep">▲ blue</span> = more reps</span>
+        <span><span className="font-semibold text-magenta">▼</span> = lower than the previous period</span>
       </p>
     </div>
   );

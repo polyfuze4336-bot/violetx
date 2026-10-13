@@ -396,7 +396,18 @@ export interface MatrixRow {
   muscleGroup: MuscleGroup;
   assisted: boolean;
   cells: (MatrixCell | null)[];
-  trend: { kind: MatrixTrendKind; deltaKg: number; pct: number | null; repDelta?: number; atKg?: number };
+  trend: {
+    kind: MatrixTrendKind;
+    deltaKg: number;
+    pct: number | null;
+    repDelta?: number;
+    atKg?: number;
+    /** First recorded best set (the baseline) and the latest one, over all data. */
+    first?: { weightKg: number; reps: number; key: string };
+    last?: { weightKg: number; reps: number; key: string };
+    /** More reps than at the baseline load, even if the load also moved. */
+    repGainAtBaseline?: { atKg: number; from: number; to: number };
+  };
 }
 
 export interface ProgressMatrix {
@@ -404,24 +415,36 @@ export interface ProgressMatrix {
   rows: MatrixRow[];
 }
 
+const MAX_MATRIX_COLUMNS = 120;
+
 /**
- * Best set (heaviest, then most reps) per exercise per period for the last
- * `count` periods, with PR markers and an overall trend per exercise.
+ * Best set (heaviest, then most reps) per exercise per period, with PR markers
+ * and an overall trend per exercise. `count` is the number of latest periods,
+ * or "all" to start at the very first recorded set so baselines are never hidden.
  */
 export function buildProgressMatrix(
   rows: TrainingSet[],
   period: Period,
-  count = 6,
+  count: number | "all" = 6,
   now: Date = new Date()
 ): ProgressMatrix {
   const currentStart = periodStart(fmt(now), period);
+  let periods = typeof count === "number" ? count : 1;
+  if (count === "all" && rows.length > 0) {
+    const earliest = rows.reduce((m, r) => (isoDay(r.date) < m ? isoDay(r.date) : m), isoDay(rows[0].date));
+    const startKey = periodStart(earliest, period);
+    for (let n = 1; n <= MAX_MATRIX_COLUMNS; n++) {
+      periods = n;
+      if (addPeriods(currentStart, period, -(n - 1)) <= startKey) break;
+    }
+  }
   const keys: string[] = [];
-  for (let i = count - 1; i >= 0; i--) keys.push(addPeriods(currentStart, period, -i));
+  for (let i = periods - 1; i >= 0; i--) keys.push(addPeriods(currentStart, period, -i));
   const index = new Map(keys.map((k, i) => [k, i]));
 
   const byExercise = new Map<
     string,
-    { name: string; muscle: MuscleGroup; assisted: boolean; best: ({ weightKg: number; reps: number } | null)[]; sets: number }
+    { name: string; muscle: MuscleGroup; assisted: boolean; best: ({ weightKg: number; reps: number } | null)[]; sets: number; bestRepsAt: Map<number, number> }
   >();
   for (const r of rows) {
     const col = index.get(periodStart(isoDay(r.date), period));
@@ -434,8 +457,10 @@ export function buildProgressMatrix(
         assisted: rowAssisted(r),
         best: keys.map(() => null),
         sets: 0,
+        bestRepsAt: new Map<number, number>(),
       };
     const assisted = entry.assisted;
+    if (r.reps > (entry.bestRepsAt.get(r.weightKg) ?? 0)) entry.bestRepsAt.set(r.weightKg, r.reps);
     const cur = entry.best[col];
     // Assisted lifts: less assistance is better.
     const better =
@@ -486,8 +511,10 @@ export function buildProgressMatrix(
 
     const first = e.best[filled[0]]!;
     const last = e.best[filled[filled.length - 1]]!;
+    const firstInfo = { weightKg: first.weightKg, reps: first.reps, key: keys[filled[0]] };
+    const lastInfo = { weightKg: last.weightKg, reps: last.reps, key: keys[filled[filled.length - 1]] };
     let trend: MatrixRow["trend"];
-    if (filled.length < 2) trend = { kind: "baseline", deltaKg: 0, pct: null };
+    if (filled.length < 2) trend = { kind: "baseline", deltaKg: 0, pct: null, first: firstInfo, last: lastInfo };
     else {
       const raw = last.weightKg - first.weightKg;
       const good = assisted ? -raw : raw;
@@ -495,10 +522,16 @@ export function buildProgressMatrix(
         kind: good > 0 ? "up" : good < 0 ? "down" : "flat",
         deltaKg: round1(raw),
         pct: first.weightKg > 0 ? Math.round((raw / first.weightKg) * 100) : null,
+        first: firstInfo,
+        last: lastInfo,
       };
       // Same top load but more reps is progression too, not "holding steady".
       if (raw === 0 && last.reps > first.reps) {
-        trend = { kind: "reps", deltaKg: 0, pct: null, repDelta: last.reps - first.reps, atKg: last.weightKg };
+        trend = { kind: "reps", deltaKg: 0, pct: null, repDelta: last.reps - first.reps, atKg: last.weightKg, first: firstInfo, last: lastInfo };
+      }
+      const bestRepsAtBaseline = e.bestRepsAt.get(first.weightKg) ?? first.reps;
+      if (bestRepsAtBaseline > first.reps) {
+        trend.repGainAtBaseline = { atKg: first.weightKg, from: first.reps, to: bestRepsAtBaseline };
       }
     }
     out.push({ exerciseId, name: e.name, muscleGroup: e.muscle, assisted, cells, trend });

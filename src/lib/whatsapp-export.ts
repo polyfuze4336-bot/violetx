@@ -28,6 +28,8 @@ export interface ExportDay {
   messageCount: number;
   /** Original message text for the day, kept as the import's audit trail. */
   sourceText: string;
+  /** Lines that looked like gym entries but could not be read. Shown, never dropped silently. */
+  unparsedLines: string[];
 }
 
 export interface GroupOptions {
@@ -94,9 +96,53 @@ function detectMonthFirst(raws: RawMessage[]): boolean {
   return monthFirstProof && !dayFirstProof;
 }
 
+const MONTHS = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+/**
+ * Markdown variant of an export:
+ *   ## 16 July 2026
+ *   [10:44 am] **You:** dip assisted 10x 34kg
+ * Returns messages, or null when the text is not in this format.
+ */
+function readMarkdownExport(text: string): ReadExportResult | null {
+  const messages: ExportMessage[] = [];
+  const senders = new Set<string>();
+  let date: string | null = null;
+  let sawHeading = false;
+  for (const original of text.split(/\r?\n/)) {
+    const line = clean(original).trim();
+    const h = line.match(/^#{1,6}\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+    if (h) {
+      const m = MONTHS.indexOf(h[2].toLowerCase());
+      date = m >= 0 ? toIso(Number(h[3]), m + 1, Number(h[1])) : null;
+      sawHeading = true;
+      continue;
+    }
+    const msg = line.match(/^\[[^\]]+\]\s+\*\*(.+?):\*\*\s*(.*)$/);
+    if (msg && date) {
+      const body = msg[2].trim();
+      if (!body || /^<media omitted>$/i.test(body)) continue;
+      senders.add(msg[1].trim());
+      messages.push({ date, sender: msg[1].trim(), text: body });
+    } else if (line && date && messages.length > 0 && !line.startsWith("#") && line !== "---") {
+      messages[messages.length - 1].text += `\n${line}`;
+    }
+  }
+  return sawHeading && messages.length > 0
+    ? { messages, senders: Array.from(senders).sort() }
+    : null;
+}
+
 /** Split an export into dated, attributed messages. System lines are dropped. */
 export function readWhatsAppExport(text: string): ReadExportResult {
   const raws: RawMessage[] = [];
+  if (!IOS.test(clean(text.split(/\r?\n/).find((l) => l.trim().startsWith("[")) ?? ""))) {
+    const md = readMarkdownExport(text);
+    if (md) return md;
+  }
 
   for (const original of text.split(/\r?\n/)) {
     const line = clean(original);
@@ -169,7 +215,11 @@ export function groupExportMessages(
     const sets = parsed.sets.filter(
       (s) => s.reps >= 1 && s.reps <= MAX_REPS && s.weightKg <= MAX_SET_KG
     );
-    if (weightKg === null && measurements.length === 0 && sets.length === 0) {
+    const unparsed = parsed.unparsedLines
+      .map((l) => l.trim())
+      // Only lines that look like an attempted set: chat like "ok 5 great job" is noise.
+      .filter((l) => /\d/.test(l) && /[a-z]{3}/i.test(l) && /\d\s*(kg|kgs|lb|lbs)\b|\d\s*[x×]\s*\d|\b\d+\s*reps?\b/i.test(l));
+    if (weightKg === null && measurements.length === 0 && sets.length === 0 && unparsed.length === 0) {
       continue;
     }
 
@@ -184,6 +234,7 @@ export function groupExportMessages(
         sets: [],
         messageCount: 0,
         sourceText: "",
+        unparsedLines: [],
       } satisfies ExportDay);
 
     if (weightKg !== null) day.weightKg = weightKg;
@@ -195,6 +246,7 @@ export function groupExportMessages(
       else day.measurements.push(m);
     }
     day.sets.push(...sets);
+    day.unparsedLines.push(...unparsed);
     day.messageCount += 1;
     day.sourceText = `${day.sourceText}${day.sourceText ? "\n\n" : ""}${msg.text}`.slice(
       0,

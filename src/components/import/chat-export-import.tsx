@@ -17,7 +17,21 @@ import {
   checkImportDuplicatesAction,
   commitImportAction,
 } from "@/lib/actions/import";
+import {
+  decisionRef,
+  ExerciseNameCheck,
+  needsNameDecision,
+  useExerciseSuggestions,
+  type NameDecision,
+} from "@/components/exercises/exercise-name-check";
 import { formatDate } from "@/lib/format";
+import { normalizeExerciseName } from "@/lib/exercise-matching";
+import {
+  IMPORT_TYPE_LABEL,
+  IMPORT_TYPES,
+  recommendImportType,
+  type ImportType,
+} from "@/lib/import-interpretation";
 import type { MeasurementTypeDTO } from "@/lib/dto";
 import type { Unit } from "@/lib/schemas";
 import {
@@ -36,10 +50,13 @@ async function readExportFile(file: File): Promise<string> {
     if (file.size > MAX_ZIP_BYTES) throw new Error("That file is too large.");
     const { unzipSync, strFromU8 } = await import("fflate");
     const entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-      filter: (f) => /\.txt$/i.test(f.name) && f.originalSize <= MAX_TEXT_BYTES,
+      filter: (f) => /\.(txt|md)$/i.test(f.name) && f.originalSize <= MAX_TEXT_BYTES,
     });
     const names = Object.keys(entries);
-    const name = names.find((n) => /_chat\.txt$/i.test(n)) ?? names[0];
+    const name =
+      names.find((n) => /_chat\.txt$/i.test(n)) ??
+      names.find((n) => /\.txt$/i.test(n)) ??
+      names[0];
     if (!name) throw new Error("No chat text file was found in that zip.");
     return strFromU8(entries[name]);
   }
@@ -73,6 +90,8 @@ export function ChatExportImport({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [result, setResult] = useState<BulkResult | null>(null);
+  const [decisions, setDecisions] = useState<Record<string, NameDecision | null>>({});
+  const [typeMode, setTypeMode] = useState<"AUTO" | ImportType>("AUTO");
 
   const days = useMemo(
     () =>
@@ -84,7 +103,48 @@ export function ChatExportImport({
   );
   // null = "all days selected" until the user changes the selection.
   const selectedDates = selected ?? new Set(days.map((d) => d.date));
-  const chosen = days.filter((d) => selectedDates.has(d.date));
+  const chosen = days.filter(
+    (d) =>
+      selectedDates.has(d.date) &&
+      (d.weightKg !== null || d.measurements.length > 0 || d.sets.length > 0)
+  );
+
+  // Every distinct exercise name gets checked against the library before saving,
+  // so typos become the canonical exercise instead of new custom ones.
+  const exerciseNames = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const d of days) for (const s of d.sets) {
+      const k = normalizeExerciseName(s.exercise);
+      if (k && !seen.has(k)) seen.set(k, s.exercise);
+    }
+    return Array.from(seen.values());
+  }, [days]);
+  const suggest = useExerciseSuggestions(exerciseNames);
+  const decisionFor = (name: string) => decisions[normalizeExerciseName(name)] ?? null;
+  const checking = exerciseNames.some((n) => !suggest(n));
+  const reviewNames = exerciseNames.filter((n) => {
+    const s = suggest(n);
+    return s && (s.status === "HIGH" || s.status === "AMBIGUOUS" || decisionFor(n));
+  });
+  const pendingNames = exerciseNames.filter((n) => needsNameDecision(suggest(n), decisionFor(n)));
+  const confidentNames = pendingNames.filter((n) => suggest(n)?.status === "HIGH");
+  const totalSets = days.reduce((n, d) => n + d.sets.length, 0);
+  const unparsed = days.flatMap((d) => d.unparsedLines.map((l) => ({ date: d.date, line: l })));
+
+  function decide(name: string, d: NameDecision | null) {
+    setDecisions((prev) => ({ ...prev, [normalizeExerciseName(name)]: d }));
+  }
+
+  function acceptConfident() {
+    setDecisions((prev) => {
+      const next = { ...prev };
+      for (const n of confidentNames) {
+        const best = suggest(n)?.candidates[0];
+        if (best) next[normalizeExerciseName(n)] = { kind: "ref", ref: best.ref, name: best.name };
+      }
+      return next;
+    });
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -96,7 +156,7 @@ export function ChatExportImport({
       const parsed = readWhatsAppExport(await readExportFile(file));
       if (parsed.messages.length === 0) {
         throw new Error(
-          "This doesn't look like a WhatsApp chat export (.txt or .zip)."
+          "This doesn't look like a WhatsApp chat export (.txt, .md or .zip)."
         );
       }
       setFileName(file.name);
@@ -104,6 +164,7 @@ export function ChatExportImport({
       setSenders(parsed.senders);
       setActiveSenders(new Set(parsed.senders));
       setSelected(null);
+      setDecisions({});
     } catch (err) {
       setMessages([]);
       setSenders([]);
@@ -149,7 +210,14 @@ export function ChatExportImport({
         value: m.value,
         unit: unitFor(m.name, m.unit),
       }));
-      const sets = day.sets.map((s) => ({ ...s }));
+      const sets = day.sets.map((s) => ({
+        ...s,
+        exerciseRef: decisionRef(decisions[normalizeExerciseName(s.exercise)]),
+      }));
+      const importType =
+        typeMode === "AUTO"
+          ? recommendImportType({ rawText: day.sourceText, sets }).type
+          : typeMode;
       const weightKg = day.weightKg ?? undefined;
 
       const dup = await checkImportDuplicatesAction({
@@ -167,6 +235,7 @@ export function ChatExportImport({
       const commit = await commitImportAction({
         rawText: day.sourceText,
         date,
+        importType,
         weightKg,
         weightResolution: res(dup.data.weight),
         measurements: measurements.map((m, idx) => ({
@@ -213,7 +282,7 @@ export function ChatExportImport({
         <input
           ref={fileRef}
           type="file"
-          accept=".txt,.zip,text/plain,application/zip"
+          accept=".txt,.md,.zip,text/plain,text/markdown,application/zip"
           className="hidden"
           onChange={onFile}
         />
@@ -270,9 +339,76 @@ export function ChatExportImport({
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Found records on {days.length} day(s). Untick anything you
-                  don&apos;t want, or review a day to edit it first.
+                  Found {totalSets} set(s) across {days.length} day(s)
+                  {unparsed.length > 0 ? ` and ${unparsed.length} line(s) that could not be read` : ""}.
+                  Untick anything you don&apos;t want, or review a day to edit it first.
                 </p>
+
+                {exerciseNames.length > 0 && (
+                  <div className="space-y-2 rounded-lg border p-3" aria-label="Exercise name check">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">
+                        {checking
+                          ? "Checking exercise names…"
+                          : pendingNames.length > 0
+                            ? `${pendingNames.length} exercise name(s) need a decision`
+                            : "Exercise names checked"}
+                      </p>
+                      {confidentNames.length > 0 && (
+                        <Button type="button" size="sm" onClick={acceptConfident} disabled={busy}>
+                          Accept {confidentNames.length} suggestion(s)
+                        </Button>
+                      )}
+                    </div>
+                    {reviewNames.length > 0 && (
+                      <ul className="max-h-72 space-y-3 overflow-y-auto">
+                        {reviewNames.map((n) => (
+                          <li key={n} className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              In your chat: <span className="font-medium text-foreground">{n}</span>
+                            </p>
+                            <ExerciseNameCheck
+                              name={n}
+                              suggestion={suggest(n)}
+                              decision={decisionFor(n)}
+                              onDecide={(d) => decide(n, d)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {unparsed.length > 0 && (
+                  <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
+                    <p className="font-medium">Not imported — could not be read ({unparsed.length})</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+                      {unparsed.map((u, i) => (
+                        <li key={`${u.date}-${i}`}>
+                          {formatDate(u.date)}: {u.line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <label className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Save as</span>
+                  <select
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    value={typeMode}
+                    onChange={(e) => setTypeMode(e.target.value as "AUTO" | ImportType)}
+                    disabled={busy}
+                  >
+                    <option value="AUTO">Automatic (best guess per day)</option>
+                    {IMPORT_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {IMPORT_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <ul className="max-h-80 divide-y overflow-y-auto rounded-md border">
                   {days.map((d) => (
                     <li
@@ -296,6 +432,7 @@ export function ChatExportImport({
                                 ? `${d.measurements.length} measurement(s)`
                                 : null,
                               d.sets.length ? `${d.sets.length} set(s)` : null,
+                              d.unparsedLines.length ? `${d.unparsedLines.length} unread` : null,
                             ]
                               .filter(Boolean)
                               .join(" · ")}
@@ -318,14 +455,16 @@ export function ChatExportImport({
                   <Button
                     type="button"
                     onClick={importSelected}
-                    disabled={busy || chosen.length === 0}
+                    disabled={busy || chosen.length === 0 || checking || pendingNames.length > 0}
                   >
                     {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                     Import {chosen.length} selected day(s)
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     {progress ??
-                      "Records that already exist are skipped, never overwritten."}
+                      (pendingNames.length > 0
+                        ? "Decide the highlighted exercise names first."
+                        : "Records that already exist are skipped, never overwritten.")}
                   </p>
                 </div>
               </>

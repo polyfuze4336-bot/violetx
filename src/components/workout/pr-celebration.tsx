@@ -92,7 +92,7 @@ export function PrCelebration({
             <ul className="relative mt-3 space-y-1.5">
               {data.achievements.map((a) => (
                 <li key={a.type} className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${a.type === "REPS" ? "bg-rep/10 text-rep" : "bg-primary/10 text-primary"}`}>
                     {a.type === "REPS" ? "Rep PR" : a.label}
                   </span>
                   <span className="text-xs text-muted-foreground">{prDetail(a)}</span>

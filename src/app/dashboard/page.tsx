@@ -13,6 +13,7 @@ import { workoutService } from "@/lib/services/workout";
 import { analyticsService } from "@/lib/services/analytics";
 import { todayIso } from "@/lib/dates";
 import { prEventDetail } from "@/lib/analytics";
+import { prBadgeClass } from "@/lib/pr-tone";
 import { progressInsight } from "@/lib/violet-insights";
 import { focusMessage, staleRecordFocus, type FocusItem } from "@/lib/pr-focus";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -259,7 +260,7 @@ function LatestPrCard({ pr }: { pr: PrEventDTO | null }) {
             {formatNumber(pr.weightKg)} kg{pr.assisted ? " assistance" : ""} × {pr.reps}
           </p>
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">🏆 {d.label.toUpperCase()}</span>
+            <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", prBadgeClass(pr.type))}>🏆 {d.label.toUpperCase()}</span>
             <span className="text-xs font-medium">{d.detail}</span>
           </div>
           <p className="text-xs text-muted-foreground">{formatDate(pr.date)}</p>

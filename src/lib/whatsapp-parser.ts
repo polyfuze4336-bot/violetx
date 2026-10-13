@@ -242,6 +242,10 @@ function parseExerciseLine(line: string): ParsedExerciseSet | null {
     return makeSet(name, leftNum, rightNum);
   }
 
+  // "<name> <reps> <weight>kg" with no "x": "Pect fly 12 27kg" (the kg marks the load).
+  const spaced = line.match(/^(.+?)\s+(\d{1,3})\s+(\d+(?:[.,]\d+)?)\s*kgs?\.?$/i);
+  if (spaced) return makeSet(spaced[1], spaced[2], spaced[3]);
+
   return null;
 }
 
@@ -297,7 +301,8 @@ function makeSet(
   repsRaw: string,
   weightRaw: string
 ): ParsedExerciseSet | null {
-  const exercise = formatExerciseName(nameRaw);
+  // A stray number in front of the name ("123 tricep cable pull") is not part of it.
+  const exercise = formatExerciseName(nameRaw.replace(/^\s*\d{1,3}\s+(?=[A-Za-z])/, ""));
   const reps = Number(repsRaw);
   const weightKg = Number(weightRaw.replace(",", "."));
   if (
@@ -331,7 +336,8 @@ export function parseWhatsAppMessage(
 
   for (const rawLine of text.split(/\r?\n/)) {
     // Invisible marks and list numbering ("2. leg extension 10x40") are not part of the data.
-    const trimmed = stripLabelNoise(rawLine);
+    // "7’x 12.5kg": a typographic apostrophe after the reps is not part of the numbers.
+    const trimmed = stripLabelNoise(rawLine).replace(/(\d)\s*[\u2019\u2018\u2032'`\u00B4]+\s*(?=[x\u00D7*])/g, "$1 ");
     if (!trimmed) continue;
     const { text: line, claimed } = stripPrWording(trimmed);
     if (!line) continue;
